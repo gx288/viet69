@@ -1,7 +1,7 @@
 {
   "DOMAIN": "https://viet69.nu",
-  "NUM_THREADS": 100,
-  "DETAIL_DELAY": 0.5,
+  "NUM_THREADS": 50,
+  "DETAIL_DELAY": 1,
   "DATA_TXT": "data.txt",
   "TEMP_CSV": "temp.csv",
   "SCOPE": ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"],
