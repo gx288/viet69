@@ -82,7 +82,7 @@ def scrape_page(page_num):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        items = soup.find_all('div', class_='item cf')
+        items = soup.find_all('div', class_='item-video')
         logger.info(f"Found {len(items)} items on page {page_num}")
         if not items:
             global stop_scraping
@@ -95,7 +95,7 @@ def scrape_page(page_num):
         for i, item in enumerate(items):
             logger.debug(f"Processing item {i+1} on page {page_num}")
             try:
-                # Extract post ID from class (e.g., post-70968)
+                # Extract post ID from class (e.g., post-70905)
                 classes = item.get('class', [])
                 post_id = next((c.replace('post-', '') for c in classes if c.startswith('post-')), None)
                 if not post_id:
