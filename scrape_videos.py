@@ -92,6 +92,7 @@ def scrape_page(page_num):
                 
                 title_elem = item.find('h2', class_='entry-title')
                 title = title_elem.find('a').text if title_elem and title_elem.find('a') else ''
+                title = title.lstrip('Permalink to ').strip()  # Remove "Permalink to " from title
                 
                 link_elem = item.find('a', class_='clip-link')
                 link = urljoin(DOMAIN, link_elem.get('href')) if link_elem else ''
@@ -116,6 +117,7 @@ def scrape_page(page_num):
                 
                 summary_elem = item.find('p', class_='entry-summary')
                 summary = summary_elem.text.strip() if summary_elem else ''
+                summary = summary.lstrip('Video ').strip()  # Remove "Video " from summary
                 
                 video_data = {
                     'page': page_num,
@@ -204,26 +206,31 @@ def main():
     while page_num <= max_pages and not stop_scraping:
         start_page = page_num
         end_page = min(page_num + batch_size - 1, max_pages)
-        logger.info(f"Processing pages {start_page} to {end_page}")
+        
+        # Enqueue pages for this batch
         for i in range(start_page, end_page + 1):
             page_queue.put(i)
+        
+        # Start processing batch
+        logger.info(f"Processing pages {start_page} to {end_page}")
+        threads = []
+        for i in range(NUM_THREADS):
+            t = threading.Thread(target=worker, name=f"Worker-{i}")
+            t.start()
+            threads.append(t)
+        
+        # Wait for threads to complete this batch
+        for t in threads:
+            t.join()
+        
         page_num += batch_size
-    
-    threads = []
-    for i in range(NUM_THREADS):
-        t = threading.Thread(target=worker, name=f"Worker-{i}")
-        t.start()
-        threads.append(t)
-    
-    for t in threads:
-        t.join()
     
     with data_lock:
         unique_data = existing_data[:]
         new_ids = {item['id'] for item in all_video_data}
         new_links = {item['link'] for item in all_video_data}
         unique_data.extend([item for item in all_video_data if item['id'] not in existing_ids and item['link'] not in existing_links])
-        logger.info(f"Total: scraped {total_pages_scraped} pages, found {len(unique_data)} items")
+        logger.info(f"Total: scraped {total_pages_scraped} pages, found {len(all_video_data)} new items, {len(unique_data)} total items (including existing)")
     
     save_data(unique_data)
 
