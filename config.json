@@ -1,6 +1,6 @@
 {
   "DOMAIN": "https://viet69.nu",
-  "NUM_THREADS": 50,
+  "NUM_THREADS": 20,
   "DETAIL_DELAY": 1,
   "DATA_TXT": "data.txt",
   "TEMP_CSV": "temp.csv",
