@@ -32,6 +32,7 @@ except Exception as e:
 
 DOMAIN = config['DOMAIN']
 NUM_THREADS = config.get('NUM_THREADS', 10)  # Default to 10 threads if not specified
+LIMIT_PAGES_NO_NEW = config.get('LIMIT_PAGES_NO_NEW', 10)  # New config for pages to scrape when no new posts, default 10
 DETAIL_DELAY = config['DETAIL_DELAY']
 DATA_TXT = config['DATA_TXT']
 TEMP_CSV = config['TEMP_CSV']
@@ -173,10 +174,13 @@ def load_existing_data():
 def save_data(data):
     """Save data to data.txt and update Google Sheets."""
     try:
-        with open(DATA_TXT, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # Sort data before saving to txt (same as sheet: page asc, id desc)
+        sorted_data = sorted(data, key=lambda x: (x['page'], -int(x['id'])))
         
-        df = pd.DataFrame(data)
+        with open(DATA_TXT, 'w', encoding='utf-8') as f:
+            json.dump(sorted_data, f, ensure_ascii=False, indent=2)
+        
+        df = pd.DataFrame(sorted_data)
         if not df.empty:
             df['id'] = pd.to_numeric(df['id'], errors='coerce')
             df = df.sort_values(by=['page', 'id'], ascending=[True, False])
@@ -239,11 +243,16 @@ def main():
         logger.info("New posts found on page 1. Scraping all pages.")
         pages_to_scrape = max_pages
     else:
-        logger.info("No new posts on page 1. Scraping first 10 pages for stats update.")
-        pages_to_scrape = 10
+        logger.info(f"No new posts on page 1. Scraping first {LIMIT_PAGES_NO_NEW} pages for stats update.")
+        pages_to_scrape = LIMIT_PAGES_NO_NEW
 
     # Now scrape the determined range in batches
-    page_num = 1  # Start from 1, but since page 1 is already scraped, we can include it or skip
+    page_num = 1  # Start from 1, but since page 1 is already scraped, start from 2 if needed
+    if pages_to_scrape > 1:
+        page_num = 2  # Skip page 1 since already scraped
+        # Add page 1 data to all_video_data
+        all_video_data.extend(page1_data)
+
     while page_num <= pages_to_scrape and not stop_scraping:
         start_page = page_num
         end_page = min(page_num + batch_size - 1, pages_to_scrape)
@@ -260,7 +269,7 @@ def main():
         unique_data = list(existing_dict.values())
         logger.info(f"Total: scraped {total_pages_scraped} pages, updated/added {len(all_video_data)} items, {len(unique_data)} total items")
 
-    # If we only scraped 10 pages but there are more existing, keep them
+    # Save sorted data
     save_data(unique_data)
 
 if __name__ == '__main__':
