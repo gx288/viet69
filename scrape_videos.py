@@ -31,7 +31,7 @@ except Exception as e:
     raise
 
 DOMAIN = config['DOMAIN']
-NUM_THREADS = config['NUM_THREADS']
+NUM_THREADS = config.get('NUM_THREADS', 10)  # Default to 10 threads if not specified
 DETAIL_DELAY = config['DETAIL_DELAY']
 DATA_TXT = config['DATA_TXT']
 TEMP_CSV = config['TEMP_CSV']
@@ -194,44 +194,73 @@ def save_data(data):
     except Exception as e:
         logger.error(f"Error saving data: {str(e)}")
 
+def process_batch(start_page, end_page):
+    """Process a batch of pages using threads."""
+    # Enqueue pages for this batch
+    for i in range(start_page, end_page + 1):
+        page_queue.put(i)
+    
+    # Start processing batch
+    logger.info(f"Processing pages {start_page} to {end_page}")
+    threads = []
+    for i in range(NUM_THREADS):
+        t = threading.Thread(target=worker, name=f"Worker-{i}")
+        t.start()
+        threads.append(t)
+    
+    # Wait for threads to complete this batch
+    for t in threads:
+        t.join()
+
 def main():
+    global all_video_data, stop_scraping
     logger.info("Starting scraper")
     existing_data = load_existing_data()
-    existing_ids = {item['id'] for item in existing_data}
-    existing_links = {item['link'] for item in existing_data}
-    
-    page_num = 1
+    existing_dict = {item['id']: item for item in existing_data}  # Use dict for quick lookup and override
+
     max_pages = 1000
-    batch_size = 100
-    while page_num <= max_pages and not stop_scraping:
+    batch_size = 10  # Set batch size to 10 pages
+
+    # First, scrape page 1 to check for new posts
+    logger.info("Scraping page 1 to check for new posts")
+    all_video_data = []  # Reset for page 1
+    stop_scraping = False
+    scrape_page(1)  # Scrape page 1 synchronously
+    page1_data = all_video_data[:]
+    all_video_data = []  # Reset for further scraping
+
+    has_new_posts = False
+    for item in page1_data:
+        if item['id'] not in existing_dict:
+            has_new_posts = True
+            break
+
+    if has_new_posts:
+        logger.info("New posts found on page 1. Scraping all pages.")
+        pages_to_scrape = max_pages
+    else:
+        logger.info("No new posts on page 1. Scraping first 10 pages for stats update.")
+        pages_to_scrape = 10
+
+    # Now scrape the determined range in batches
+    page_num = 1  # Start from 1, but since page 1 is already scraped, we can include it or skip
+    while page_num <= pages_to_scrape and not stop_scraping:
         start_page = page_num
-        end_page = min(page_num + batch_size - 1, max_pages)
+        end_page = min(page_num + batch_size - 1, pages_to_scrape)
         
-        # Enqueue pages for this batch
-        for i in range(start_page, end_page + 1):
-            page_queue.put(i)
-        
-        # Start processing batch
-        logger.info(f"Processing pages {start_page} to {end_page}")
-        threads = []
-        for i in range(NUM_THREADS):
-            t = threading.Thread(target=worker, name=f"Worker-{i}")
-            t.start()
-            threads.append(t)
-        
-        # Wait for threads to complete this batch
-        for t in threads:
-            t.join()
+        process_batch(start_page, end_page)
         
         page_num += batch_size
-    
+
+    # Merge and override data
     with data_lock:
-        unique_data = existing_data[:]
-        new_ids = {item['id'] for item in all_video_data}
-        new_links = {item['link'] for item in all_video_data}
-        unique_data.extend([item for item in all_video_data if item['id'] not in existing_ids and item['link'] not in existing_links])
-        logger.info(f"Total: scraped {total_pages_scraped} pages, found {len(all_video_data)} new items, {len(unique_data)} total items (including existing)")
-    
+        for item in all_video_data:
+            existing_dict[item['id']] = item  # Override if exists, add if new
+        
+        unique_data = list(existing_dict.values())
+        logger.info(f"Total: scraped {total_pages_scraped} pages, updated/added {len(all_video_data)} items, {len(unique_data)} total items")
+
+    # If we only scraped 10 pages but there are more existing, keep them
     save_data(unique_data)
 
 if __name__ == '__main__':
