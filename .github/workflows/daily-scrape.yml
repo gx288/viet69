@@ -2,7 +2,7 @@ name: Daily Video Scrape
 
 on:
   schedule:
-    - cron: '0 */4 * * *'  # 7:00 AM VN time
+    - cron: '0 * * * *'  # 7:00 AM VN time
   workflow_dispatch:
 
 jobs:
