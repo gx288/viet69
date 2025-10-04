@@ -1,11 +1,27 @@
 {
-  "DOMAIN": "https://viet69.nu",
-  "NUM_THREADS": 20,
+  "DOMAIN": "https://xnhau.sh/clip-sex-moi",
+  "NUM_THREADS": 10,
   "LIMIT_PAGES_NO_NEW": 10,
-  "DETAIL_DELAY": 1,
+  "DETAIL_DELAY": 1.0,
   "DATA_TXT": "data.txt",
-  "TEMP_CSV": "temp.csv",
-  "SCOPE": ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"],
+  "TEMP_CSV": "temp_videos.csv",
+  "FORCE_ALL_PAGES": false,
+  "GOOGLE_SHEETS_ENABLED": false,
+  "SCOPE": ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"],
   "CREDENTIALS_FILE": "credentials.json",
-  "SHEET_ID": "1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU"  
+  "SHEET_ID": "1senw8BZcIraWNwFG4lH5_pvOZrBA6CQ71gBgMkvgMYA",
+  "HEADERS": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Referer": "https://xnhau.sh/",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1"
+  },
+  "PROXIES": {
+    "http": "http://user49005:2lsBkRUegO@42.96.12.24:49005",
+    "https": "http://user49005:2lsBkRUegO@42.96.12.24:49005"
+  }
 }
