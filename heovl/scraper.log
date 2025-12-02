@@ -72,3 +72,13 @@
 2025-12-02 04:39:35,628 - INFO - [Việt Nam] HOÀN TẤT → 0 video (cập nhật 0)
 2025-12-02 04:39:35,628 - INFO - Đang cập nhật Google Sheets...
 2025-12-02 04:39:36,386 - INFO - HOÀN TẤT TOÀN BỘ! TẤT CẢ DỮ LIỆU ĐÃ LÊN GOOGLE SHEETS
+2025-12-02 06:14:54,831 - INFO - Không còn proxy cũ nào sống → TÌM MỚI (có 1 cái là chạy luôn)!
+2025-12-02 06:14:55,697 - INFO - Tổng 40,266 proxy mới → test song song...
+2025-12-02 06:15:07,850 - INFO - → TÌM THẤY PROXY SỐNG: http://171.234.50.255:5116 → CHẠY SCRAPE NGAY!
+2025-12-02 06:15:20,510 - INFO - === BẮT ĐẦU SCRAPE HEOVL.MOE – ỔN ĐỊNH VĨNH VIỄN ===
+2025-12-02 06:15:20,511 - INFO - [Việt Nam] Load 0 video cũ
+2025-12-02 06:15:20,511 - INFO - [Việt Nam] Đang quét trang 1
+2025-12-02 06:16:38,802 - INFO - [Việt Nam] Trang 1 → 0 video | +0 cập nhật
+2025-12-02 06:16:38,802 - INFO - [Việt Nam] HOÀN TẤT → 0 video (cập nhật 0)
+2025-12-02 06:16:38,802 - INFO - Đang cập nhật Google Sheets...
+2025-12-02 06:16:39,949 - INFO - HOÀN TẤT TOÀN BỘ! DỮ LIỆU ĐÃ LÊN GOOGLE SHEETS
