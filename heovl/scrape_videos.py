@@ -1,3 +1,5 @@
+# heovl/scrape_videos.py
+
 import json
 import requests
 from bs4 import BeautifulSoup
@@ -8,11 +10,16 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import os
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urljoin
 import logging
 import re
+from datetime import datetime
 
-# ====================== CONFIG & LOGGING ======================
+# ====================== SETUP PATH & LOGGING ======================
+# Lấy đúng thư mục chứa file .py này (dù chạy từ đâu)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(SCRIPT_DIR)  # Đảm bảo working directory là heovl/
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -23,32 +30,50 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load config
-with open('config.json', 'r', encoding='utf-8') as f:
-    config = json.load(f)
+# ====================== LOAD CONFIG ======================
+try:
+    with open('config.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
+except Exception as e:
+    logger.error("Không tìm thấy hoặc lỗi config.json")
+    raise
 
-CATEGORIES = config['CATEGORIES']  # List các category cần scrape
-NUM_THREADS = config.get('NUM_THREADS', 8)
-DETAIL_DELAY = config.get('DETAIL_DELAY', 0.5)
+CATEGORIES = config['CATEGORIES']
+NUM_THREADS = config.get('NUM_THREADS', 6)
+DETAIL_DELAY = config.get('DETAIL_DELAY', 0.8)
 DATA_FOLDER = config.get('DATA_FOLDER', 'data')
-TEMP_CSV = config.get('TEMP_CSV', 'temp_videos.csv')
 SCOPE = config['SCOPE']
 CREDENTIALS_FILE = config['CREDENTIALS_FILE']
 SHEET_ID = config['SHEET_ID']
 
+# Tạo thư mục data nếu chưa có
 os.makedirs(DATA_FOLDER, exist_ok=True)
 
 headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+    'Accept-Language': 'vi-VN,vi;q=0.9',
 }
 
-# Thread-safe structures
-page_queue = queue.Queue()
+# ====================== GLOBAL DATA ======================
+global_category_data = {}  # {category_name: [list of videos]}
 data_lock = threading.Lock()
 stop_event = threading.Event()
 
+# ====================== HELPERS ======================
 def clean_title(title):
-    return re.sub(r'^Vén váy lên rồi.*\.\.\.$', lambda m: m.group(0)[:-3], title).strip()
+    """Loại bỏ dấu "..." ở cuối tiêu đề ngắn"""
+    return re.sub(r'\.\.\.$', '', title).strip()
+
+def parse_number(text):
+    """Chuyển '12.5K', '1.2M' → số nguyên"""
+    if not text:
+        return 0
+    text = text.strip().replace(',', '')
+    if 'K' in text.upper():
+        return int(float(text.upper().replace('K', '')) * 1000)
+    if 'M' in text.upper():
+        return int(float(text.upper().replace('M', '')) * 1000000)
+    return int(re.sub(r'\D', '', text) or 0)
 
 def extract_video_data(box, base_url, page_num):
     try:
@@ -57,27 +82,25 @@ def extract_video_data(box, base_url, page_num):
             return None
 
         link = urljoin(base_url, a_tag.get('href'))
-        title_full = a_tag.get('title') or ''
-        title_short = box.find('h3', class_='video-box__heading')
-        title = title_full or (title_short.text.strip() if title_short else '')
+        full_title = a_tag.get('title') or ''
+        short_title = box.find('h3', class_='video-box__heading')
+        title = full_title or (short_title.get_text(strip=True) if short_title else '')
         title = clean_title(title)
 
         img = a_tag.find('img')
         thumbnail = urljoin(base_url, img['src']) if img and img.get('src') else ''
 
-        # Extract views
-        views_text = '0'
-        views_el = box.find('small', string=re.compile(r'\d+'))
-        if views_el:
-            views_text = views_el.text.strip()
-        views = int(re.sub(r'\D', '', views_text) or '0')
+        # Views & Comments
+        stats = box.find_all('small')
+        views = 0
+        comments = 0
+        if len(stats) >= 2:
+            views = parse_number(stats[0].get_text(strip=True))
+            comments = parse_number(stats[1].get_text(strip=True))
+        elif len(stats) == 1:
+            views = parse_number(stats[0].get_text(strip=True))
 
-        # Comments
-        comment_el = box.find_all('small')[-1] if len(box.find_all('small')) > 1 else None
-        comments = int(re.sub(r'\D', '', comment_el.text.strip())) if comment_el else 0
-
-        # Extract video ID from URL
-        video_id = link.split('/')[-1] if '/' in link else link
+        video_id = link.strip('/').split('/')[-1]
 
         return {
             'page': page_num,
@@ -87,22 +110,21 @@ def extract_video_data(box, base_url, page_num):
             'thumbnail': thumbnail,
             'views': views,
             'comments': comments,
-            'scraped_at': time.strftime('%Y-%m-%d %H:%M:%S')
+            'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
     except Exception as e:
-        logger.warning(f"Error parsing item: {e}")
+        logger.warning(f"Parse error: {e}")
         return None
 
 def scrape_page(url, page_num):
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        r = requests.get(url, headers=headers, timeout=15)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, 'html.parser')
 
         boxes = soup.find_all('div', class_='video-box')
         if not boxes:
-            logger.info(f"No videos found on page {page_num} -> end of content")
-            return [], True  # is_last_page
+            return [], True  # end of content
 
         items = []
         for box in boxes:
@@ -110,106 +132,121 @@ def scrape_page(url, page_num):
             if data:
                 items.append(data)
 
-        # Check if next page exists
-        next_page = soup.find('a', rel='next')
-        is_last = not bool(next_page)
+        # Kiểm tra có trang tiếp không
+        next_btn = soup.find('a', rel='next')
+        is_last = not bool(next_btn)
         return items, is_last
 
     except Exception as e:
         logger.error(f"Error scraping {url}: {e}")
         return [], True
 
-def worker(category_name, base_url):
-    existing_file = os.path.join(DATA_FOLDER, f"{category_name}.json")
-    existing_data = {}
-    if os.path.exists(existing_file):
-        try:
-            with open(existing_file, 'r', encoding='utf-8') as f:
-                existing_data = {item['id']: item for item in json.load(f)}
-        except:
-            existing_data = {}
+# ====================== WORKER PER CATEGORY ======================
+def scrape_category(category_name, base_url):
+    data_file = os.path.join(DATA_FOLDER, f"{category_name}.json")
+    existing = {}
 
-    all_new_data = []
+    if os.path.exists(data_file):
+        try:
+            with open(data_file, 'r', encoding='utf-8') as f:
+                existing = {item['id']: item for item in json.load(f)}
+            logger.info(f"[{category_name}] Loaded {len(existing)} existing items")
+        except:
+            existing = {}
+
+    all_items = existing.copy()
     page = 1
+    updated_count = 0
+
     while not stop_event.is_set():
         url = base_url if page == 1 else f"{base_url}&page={page}"
-        logger.info(f"[{category_name}] Scraping page {page}")
+        logger.info(f"[{category_name}] Đang quét trang {page}")
 
         items, is_last = scrape_page(url, page)
-        if not items or is_last and page > 1:
-            logger.info(f"[{category_name}] Reached last page: {page}")
+        if not items:
+            logger.info(f"[{category_name}] Không còn video → dừng")
             break
 
-        new_items = 0
         for item in items:
             vid = item['id']
-            if vid not in existing_data or existing_data[vid]['views'] != item['views'] or existing_data[vid]['comments'] != item['comments']:
-                existing_data[vid] = item
-                all_new_data.append(item)
-                new_items += 1
+            if vid not in all_items or \
+               all_items[vid]['views'] != item['views'] or \
+               all_items[vid]['comments'] != item['comments']:
+                all_items[vid] = item
+                updated_count += 1
 
-        logger.info(f"[{category_name}] Page {page}: {len(items)} items, {new_items} updated/new")
+        logger.info(f"[{category_name}] Trang {page}: {len(items)} video, +{updated_count} cập nhật mới")
+        
+        if is_last:
+            logger.info(f"[{category_name}] Đã tới trang cuối: {page}")
+            break
+
         page += 1
         time.sleep(DETAIL_DELAY)
 
-    # Save per category
-    sorted_data = sorted(existing_data.values(), key=lambda x: (x['page'], -x['views']), reverse=False)
-    with open(existing_file, 'w', encoding='utf-8') as f:
-        json.dump(sorted_data, f, ensure_ascii=False, indent=2)
+    # Sort: trang tăng dần, views giảm dần
+    sorted_items = sorted(all_items.values(), key=lambda x: (x['page'], -x['views']))
+
+    # Lưu file JSON riêng cho category
+    with open(data_file, 'w', encoding='utf-8') as f:
+        json.dump(sorted_items, f, ensure_ascii=False, indent=2)
 
     with data_lock:
-        global_category_data[category_name] = sorted_data
+        global_category_data[category_name] = sorted_items
 
-# Global dict to store all category data
-global_category_data = {}
+    logger.info(f"[{category_name}] Hoàn tất! Tổng: {len(sorted_items)} video (cập nhật {updated_count})")
 
+# ====================== MAIN ======================
 def main():
-    global global_category_data
-    threads = []
+    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE ===")
 
+    threads = []
     for cat in CATEGORIES:
         name = cat['name']
         url = cat['url']
-        logger.info(f"Starting scrape for category: {name} -> {url}")
-        t = threading.Thread(target=worker, args=(name, url), daemon=True)
+        t = threading.Thread(target=scrape_category, args=(name, url), daemon=True)
         t.start()
         threads.append(t)
 
+    # Chờ tất cả category hoàn thành (tối đa 15 phút)
     for t in threads:
-        t.join(timeout=600)
+        t.join(timeout=900)
 
     if stop_event.is_set():
-        logger.error("Scraping stopped due to timeout")
+        logger.error("Timeout! Một số category chưa hoàn thành.")
         return
 
-    # =============== UPDATE GOOGLE SHEETS ===============
+    # ====================== CẬP NHẬT GOOGLE SHEETS ======================
     try:
+        logger.info("Đang kết nối Google Sheets...")
         creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPE)
         client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(SHEET_ID)
+        sh = client.open_by_key(SHEET_ID)
 
-        for cat_name, data in global_category_data.items():
-            df = pd.DataFrame(data)
-            if df.empty:
+        for cat_name, data_list in global_category_data.items():
+            if not data_list:
                 continue
 
+            df = pd.DataFrame(data_list)
             df = df.sort_values(by=['page', 'views'], ascending=[True, False])
             df['views'] = df['views'].astype(int)
             df['comments'] = df['comments'].astype(int)
 
             try:
-                sheet = spreadsheet.worksheet(cat_name)
-                sheet.clear()
+                worksheet = sh.worksheet(cat_name)
+                worksheet.clear()
+                logger.info(f"Cập nhật sheet hiện có: {cat_name}")
             except gspread.exceptions.WorksheetNotFound:
-                sheet = spreadsheet.add_worksheet(title=cat_name, rows=1000, cols=10)
+                worksheet = sh.add_worksheet(title=cat_name, rows=2000, cols=10)
+                logger.info(f"Tạo sheet mới: {cat_name}")
 
-            sheet.update([df.columns.values.tolist()] + df.values.tolist())
-            logger.info(f"Updated sheet: {cat_name} ({len(df)} rows)")
+            worksheet.update([df.columns.values.tolist()] + df.values.tolist())
+            logger.info(f"Đã cập nhật sheet '{cat_name}' → {len(df)} dòng")
 
-        logger.info("All done! Google Sheets updated successfully.")
+        logger.info("HOÀN TẤT! Tất cả dữ liệu đã được cập nhật lên Google Sheets.")
 
     except Exception as e:
-        logger.error(f"Google Sheets update failed: {e}")
+        logger.error(f"Lỗi cập nhật Google Sheets: {e}")
 
 if __name__ == '__main__':
     main()
