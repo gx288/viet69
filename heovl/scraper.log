@@ -82,3 +82,13 @@
 2025-12-02 06:16:38,802 - INFO - [Việt Nam] HOÀN TẤT → 0 video (cập nhật 0)
 2025-12-02 06:16:38,802 - INFO - Đang cập nhật Google Sheets...
 2025-12-02 06:16:39,949 - INFO - HOÀN TẤT TOÀN BỘ! DỮ LIỆU ĐÃ LÊN GOOGLE SHEETS
+2025-12-02 06:44:03,777 - INFO - TÌM PROXY MỚI – CHỈ CHẤP NHẬN QUA CLOUDFLARE!
+2025-12-02 06:44:04,547 - INFO - Tổng 40,500 proxy → test nghiêm ngặt...
+2025-12-02 06:44:30,458 - INFO - TÌM THẤY PROXY HOÀN HẢO: http://14.241.80.37:8080 → CHẠY NGAY!
+2025-12-02 06:44:59,018 - INFO - === BẮT ĐẦU SCRAPE HEOVL.MOE – ỔN ĐỊNH VĨNH VIỄN ===
+2025-12-02 06:44:59,018 - INFO - [Việt Nam] Load 0 video cũ
+2025-12-02 06:44:59,018 - INFO - [Việt Nam] Đang quét trang 1
+2025-12-02 06:46:45,955 - INFO - [Việt Nam] Trang 1 → 0 video | +0 cập nhật
+2025-12-02 06:46:45,955 - INFO - [Việt Nam] HOÀN TẤT → 0 video (cập nhật 0)
+2025-12-02 06:46:45,956 - INFO - Đang cập nhật Google Sheets...
+2025-12-02 06:46:48,146 - INFO - HOÀN TẤT TOÀN BỘ!
