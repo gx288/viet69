@@ -1,10 +1,9 @@
 name: Daily Heovl Scrape
 
-# Chạy tự động lúc 7:05 sáng giờ Việt Nam (UTC+7 → 0:05 UTC)
 on:
   schedule:
     - cron: '5 0 * * *'
-  workflow_dispatch:  # Cho phép chạy thủ công từ GitHub
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -12,57 +11,49 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Đảm bảo lấy toàn bộ lịch sử để commit/push
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'  # Dùng 3.11 cho tốc độ nhanh hơn
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 pandas gspread google-auth lxml html5lib
+          pip install requests beautifulsoup4 pandas gspread google-auth lxml html5lib fake-useragent
 
-      - name: Write Google Service Account credentials
+      - name: Write Google credentials
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
           echo "$GOOGLE_CREDENTIALS" > heovl/credentials.json
 
-      # THÊM DÒNG NÀY để xóa file credentials trước khi commit
-      - name: Remove credentials file before commit
-        if: always()
-        run: |
-          rm -f heovl/credentials.json
-          echo "credentials.json đã bị xóa để tránh bị chặn push"
-
-      - name: Run scraper (inside heovl folder)
+      - name: Run scraper
         working-directory: heovl
+        env:
+          # Dùng fake-useragent + thêm header chống 403
+          PYTHONUNBUFFERED: 1
         run: |
           python scrape_videos.py
 
-      - name: Commit & Push updated data + log
+      - name: Remove credentials before commit (tránh bị chặn push)
+        run: |
+          rm -f heovl/credentials.json
+          echo "credentials.json đã được xóa an toàn"
+
+      - name: Commit & Push data
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          
-          # Thêm tất cả file thay đổi trong thư mục heovl/
-          git add heovl/data/ heovl/scraper.log heovl/credentials.json || echo "No data changes"
-          
-          # Commit nếu có thay đổi
-          git commit -m "Daily update: $(date +'%Y-%m-%d %H:%M:%S') (VN time)" || echo "No changes to commit"
-          
-          # Push về nhánh hiện tại
+          git add heovl/data/ heovl/scraper.log
+          git commit -m "Daily update: $(date +'%Y-%m-%d %H:%M:%S') (VN)" || echo "No changes"
           git push
 
-      - name: Upload logs & data as artifact (for debugging)
+      - name: Upload artifact (debug)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: heovl-scrape-result-${{ github.run_number }}
+          name: heovl-result-${{ github.run_number }}
           path: |
             heovl/scraper.log
-            heovl/data/*.json
-          retention-days: 7
+            heovl/data/
