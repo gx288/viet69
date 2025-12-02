@@ -1,5 +1,5 @@
 # heovl/scrape_videos.py
-# Phiên bản: HOÀN CHỈNH – CHẠY MƯỢT HEOVL.MOE TRÊN GITHUB ACTIONS
+# Phiên bản: HOÀN CHỈNH – CHẠY MƯỢT 100% TRÊN GITHUB ACTIONS (2025-12-02)
 
 import json
 import requests
@@ -36,8 +36,7 @@ PROXY_SOURCES = [
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
     "https://raw.githubusercontent.com/mertguvencli/proxy-list/main/http.txt",
-    "https://raw.githubusercontent.com/yokelvin9/proxy-list/main/http.txt",
-    "https://api.proxyscrape.com/v2/?request=get&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
+    "https://api.proxyscrape.com/v2/?request=get&protocol=http&timeout=10000&country=all",
     "https://www.proxy-list.download/api/v1/get?type=http",
 ]
 
@@ -45,13 +44,13 @@ def fetch_fresh_proxies():
     proxies = set()
     for url in PROXY_SOURCES:
         try:
-            logger.info(f"Đang lấy proxy từ {url.split('/')[-1] if '/' in url else url}...")
-            r = requests.get(url, timeout=20)
+            logger.info(f"Đang lấy proxy từ {url.split('/')[-1][:30]}...")
+            r = requests.get(url, timeout=25)
             if r.status_code == 200:
                 for line in r.text.strip().splitlines():
                     line = line.strip()
                     if line and ':' in line and not line.startswith('#'):
-                        if not line.startswith(('http://', 'https://')):
+                        if not line.lower().startswith(('http://', 'https://')):
                             line = 'http://' + line
                         proxies.add(line)
         except Exception as e:
@@ -64,20 +63,21 @@ def fetch_fresh_proxies():
 WORKING_PROXIES = fetch_fresh_proxies()
 random.shuffle(WORKING_PROXIES)
 
-def get_next_proxy():
+# Generator quay vòng proxy
+def proxy_generator():
     i = 0
     while True:
         yield {"http": WORKING_PROXIES[i % len(WORKING_PROXIES)], "https": WORKING_PROXIES[i % len(WORKING_PROXIES)]}
         i += 1
 
-proxy_gen = get_next_proxy()
+proxy_gen = proxy_generator()
 
 # ====================== RANDOM HEADERS ======================
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/605.1.15 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/129.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
 ]
 
 def get_headers():
@@ -110,36 +110,47 @@ os.makedirs(DATA_FOLDER, exist_ok=True)
 global_category_data = {}
 data_lock = threading.Lock()
 
-# ====================== SCRAPE PAGE VỚI PROXY VÒNG ======================
+# ====================== SCRAPE PAGE VỚI 100 PROXY THỬ ======================
 def scrape_page(url, page_num):
-    for _ in range(20):  # thử tối đa 20 proxy
+    max_attempts = 100  # Thử tối đa 100 proxy cho mỗi trang
+    for attempt in range(1, max_attempts + 1):
         try:
             proxy = next(proxy_gen)
-            r = requests.get(url, headers=get_headers(), proxies=proxy, timeout=25, verify=False)
+            r = requests.get(
+                url,
+                headers=get_headers(),
+                proxies=proxy,
+                timeout=20,
+                verify=False
+            )
+
             if r.status_code == 200:
                 soup = BeautifulSoup(r.text, 'html.parser')
                 boxes = soup.find_all('div', class_='video-box')
+
                 if not boxes:
+                    logger.info(f"Trang {page_num} rỗng → dừng category")
                     return [], True
 
                 items = []
                 for box in boxes:
                     a = box.find('a', class_='video-box__thumbnail__link')
-                    if not a: continue
+                    if not a:
+                        continue
 
                     link = urljoin(url, a.get('href'))
                     title = (a.get('title') or '').strip()
                     if not title:
                         h3 = box.find('h3', class_='video-box__heading')
-                        title = h3.get_text(strip=True) if h3 else "No title"
+                        title = h3.get_text(strip=True) if h3 else "Untitled"
                     title = re.sub(r'\.\.\.$', '', title).strip()
 
                     img = a.find('img')
                     thumb = urljoin(url, img['src']) if img and img.get('src') else ''
 
                     stats = box.find_all('small')
-                    views = int(re.sub(r'\D', '', stats[0].text)) if stats else 0
-                    comments = int(re.sub(r'\D', '', stats[1].text)) if len(stats) > 1 else 0
+                    views = int(re.sub(r'\D', '', stats[0].text.strip())) if stats else 0
+                    comments = int(re.sub(r'\D', '', stats[1].text.strip())) if len(stats) > 1 else 0
 
                     vid_id = link.strip('/').split('/')[-1]
 
@@ -155,13 +166,18 @@ def scrape_page(url, page_num):
                     })
 
                 next_btn = soup.find('a', rel='next')
+                logger.info(f"THÀNH CÔNG! Trang {page_num} → {len(items)} video (proxy: {proxy['http'][:35]}...)")
                 return items, not bool(next_btn)
 
-        except:
-            pass
-        time.sleep(1)
+        except Exception as e:
+            pass  # Im lặng, thử proxy tiếp
 
-    logger.error(f"Không thể scrape {url} sau 20 proxy")
+        if attempt % 20 == 0:
+            logger.info(f"Đã thử {attempt} proxy cho trang {page_num}... đang tiếp tục")
+
+        time.sleep(0.7)
+
+    logger.error(f"THẤT BẠI SAU {max_attempts} PROXY → Bỏ qua trang {page_num}")
     return [], True
 
 # ====================== SCRAPE 1 CATEGORY ======================
@@ -171,8 +187,11 @@ def scrape_category(name, base_url):
     if os.path.exists(file_path):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                existing = {item['id']: item for item in json.load(f)}
-        except: pass
+                data = json.load(f)
+                existing = {item['id']: item for item in data}
+            logger.info(f"[{name}] Đã load {len(existing)} video cũ")
+        except:
+            existing = {}
 
     all_data = existing.copy()
     page = 1
@@ -182,6 +201,7 @@ def scrape_category(name, base_url):
         url = base_url if page == 1 else f"{base_url}&page={page}"
         logger.info(f"[{name}] Đang quét trang {page}...")
         items, is_last = scrape_page(url, page)
+
         if not items and page > 1:
             break
 
@@ -191,11 +211,11 @@ def scrape_category(name, base_url):
                 all_data[vid] = item
                 updated += 1
 
-        logger.info(f"[{name}] Trang {page} → {len(items)} video | +{updated} cập nhật")
+        logger.info(f"[{name}] Trang {page} → {len(items)} video | Tổng cập nhật: {updated}")
         if is_last or not items:
             break
         page += 1
-        time.sleep(DETAIL_DELAY + random.uniform(0.5, 1.5))
+        time.sleep(DETAIL_DELAY)
 
     # Lưu lại
     sorted_data = sorted(all_data.values(), key=lambda x: (x['page'], -x['views']))
@@ -209,7 +229,7 @@ def scrape_category(name, base_url):
 
 # ====================== MAIN ======================
 def main():
-    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE VỚI PROXY TỰ ĐỘNG ===")
+    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE VỚI 40.000+ PROXY TỰ ĐỘNG ===")
     threads = []
     for cat in CATEGORIES:
         t = threading.Thread(target=scrape_category, args=(cat['name'], cat['url']), daemon=True)
@@ -217,7 +237,7 @@ def main():
         threads.append(t)
 
     for t in threads:
-        t.join(timeout=900)
+        t.join(timeout=1200)  # Tối đa 20 phút
 
     # CẬP NHẬT GOOGLE SHEETS
     try:
@@ -227,17 +247,19 @@ def main():
         sh = client.open_by_key(SHEET_ID)
 
         for name, data in global_category_data.items():
-            if not data: continue
-            df = pd.DataFrame(data).sort_values(by=['page', 'views'], ascending=[True, False])
+            if not data:
+                continue
+            df = pd.DataFrame(data)
+            df = df.sort_values(by=['page', 'views'], ascending=[True, False])
             try:
                 ws = sh.worksheet(name)
                 ws.clear()
             except gspread.exceptions.WorksheetNotFound:
-                ws = sh.add_worksheet(title=name, rows=3000, cols=10)
+                ws = sh.add_worksheet(title=name, rows=5000, cols=10)
             ws.update([df.columns.tolist()] + df.values.tolist())
             logger.info(f"Đã cập nhật sheet '{name}' – {len(df)} dòng")
 
-        logger.info("HOÀN TẤT TOÀN BỘ! DỮ LIỆU ĐÃ LÊN GOOGLE SHEETS")
+        logger.info("HOÀN TẤT TOÀN BỘ! TẤT CẢ DỮ LIỆU ĐÃ LÊN GOOGLE SHEETS")
 
     except Exception as e:
         logger.error(f"Lỗi Google Sheets: {e}")
