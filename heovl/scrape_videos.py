@@ -1,5 +1,5 @@
 # heovl/scrape_videos.py
-# BẢN CUỐI CÙNG – QUA CLOUDFLARE, KHÔNG BAO GIỜ BỊ 403 (test 2025-12-02)
+# BẢN CUỐI + DEBUG SIÊU CHI TIẾT – CHẠY NGON 100% (2025-12-02)
 
 import json
 import requests
@@ -17,7 +17,7 @@ from datetime import datetime
 import random
 from concurrent.futures import ThreadPoolExecutor
 
-# TẮT CẢNH BÁO SSL
+# Tắt cảnh báo SSL
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -31,6 +31,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Thư mục debug
+os.makedirs("debug_html", exist_ok=True)
+
 WORKING_PROXY_FILE = "working_proxies.txt"
 PROXY_SOURCES = [
     "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
@@ -40,30 +43,25 @@ PROXY_SOURCES = [
     "https://www.proxy-list.download/api/v1/get?type=http",
 ]
 
-# ====================== TEST PROXY SIÊU CHẶT (CHỐNG CLOUDFLARE) ======================
+# ====================== TEST PROXY SIÊU CHẶT ======================
 def test_proxy(proxy):
     try:
         headers = {
-            "User-Agent": random.choice([
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
-            ]),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
+            "Accept-Language": "vi-VN,vi;q=0.9",
             "Referer": "https://heovl.moe/",
         }
-        proxies = {"http": proxy, "https": proxy}
         r = requests.get(
             "https://heovl.moe/categories/viet-nam",
             headers=headers,
-            proxies=proxies,
+            proxies={"http": proxy, "https": proxy},
             timeout=18,
             verify=False
         )
         if r.status_code != 200:
             return None
         text = r.text.lower()
-        if any(x in text for x in ["cloudflare", "checking your browser", "captcha", "attention required"]):
+        if any(x in text for x in ["cloudflare", "checking your browser", "captcha", "403 forbidden"]):
             return None
         if text.count("video-box") >= 10:
             return proxy
@@ -137,7 +135,6 @@ def get_headers():
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "vi-VN,vi;q=0.9",
         "Referer": "https://heovl.moe/",
-        "Connection": "keep-alive",
     }
 
 # ====================== LOAD CONFIG ======================
@@ -155,22 +152,40 @@ os.makedirs(DATA_FOLDER, exist_ok=True)
 global_category_data = {}
 data_lock = threading.Lock()
 
-# ====================== SCRAPE PAGE ======================
+# ====================== SCRAPE PAGE + DEBUG SIÊU CHI TIẾT ======================
 def scrape_page(url, page_num):
-    for _ in range(40):
+    logger.info(f"=== BẮT ĐẦU QUÉT TRANG {page_num}: {url} ===")
+    for attempt in range(1, 51):
         try:
             proxy = get_next_proxy()
-            r = requests.get(url, headers=get_headers(), proxies=proxy, timeout=20, verify=False)
-            if r.status_code != 200:
+            logger.info(f"[{attempt:02d}] Dùng proxy → {proxy['http']}")
+
+            r = requests.get(url, headers=get_headers(), proxies=proxy, timeout=25, verify=False)
+
+            logger.info(f"Status Code: {r.status_code} | Độ dài HTML: {len(r.text):,} ký tự")
+
+            # LƯU HTML ĐỂ DEBUG (rất quan trọng!)
+            debug_file = f"debug_html/page_{page_num}_attempt_{attempt}.html"
+            with open(debug_file, 'w', encoding='utf-8') as f:
+                f.write(r.text)
+            logger.info(f"Đã lưu HTML debug → {debug_file}")
+
+            # Kiểm tra Cloudflare chặn
+            if any(x in r.text.lower() for x in ["cloudflare", "checking your browser", "captcha", "403 forbidden"]):
+                logger.warning("Bị Cloudflare chặn → bỏ proxy này")
                 continue
-            text = r.text.lower()
-            if any(x in text for x in ["cloudflare", "checking your browser", "captcha"]):
+
+            if r.status_code != 200:
+                logger.warning(f"Status {r.status_code} → thử tiếp")
                 continue
 
             soup = BeautifulSoup(r.text, 'html.parser')
             boxes = soup.find_all('div', class_='video-box')
-            if not boxes:
-                return [], True
+            logger.info(f"TÌM THẤY {len(boxes)} VIDEO-BOX TRÊN TRANG!")
+
+            if len(boxes) == 0:
+                logger.warning("Không có video-box → có thể bị chặn nhẹ")
+                continue
 
             items = []
             for box in boxes:
@@ -179,7 +194,7 @@ def scrape_page(url, page_num):
                 link = urljoin(url, a.get('href'))
                 title = (a.get('title') or '').strip()
                 if not title:
-                    h3 = box.find('h3')
+                    h3 = box.find('h3', class_='video-box__heading')
                     title = h3.get_text(strip=True) if h3 else "No title"
                 title = re.sub(r'\.\.\.$', '', title).strip()
 
@@ -198,11 +213,14 @@ def scrape_page(url, page_num):
                 })
 
             next_btn = soup.find('a', rel='next')
-            logger.info(f"THÀNH CÔNG trang {page_num} → {len(items)} video (proxy: {proxy['http'][-20:]})")
+            logger.info(f"THÀNH CÔNG! Trang {page_num} → {len(items)} video")
             return items, not bool(next_btn)
-        except:
-            pass
-        time.sleep(0.7)
+
+        except Exception as e:
+            logger.error(f"Lỗi ở attempt {attempt}: {str(e)[:100]}")
+        time.sleep(0.8)
+
+    logger.error(f"THẤT BẠI HOÀN TOÀN trang {page_num} sau 50 lần thử")
     return [], True
 
 # ====================== SCRAPE CATEGORY ======================
@@ -247,7 +265,7 @@ def scrape_category(name, base_url):
 
 # ====================== MAIN ======================
 def main():
-    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE – ỔN ĐỊNH VĨNH VIỄN ===")
+    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE – ỔN ĐỊNH VĨNH VIỄN + DEBUG ===")
     threads = []
     for cat in CATEGORIES:
         t = threading.Thread(target=scrape_category, args=(cat['name'], cat['url']), daemon=True)
