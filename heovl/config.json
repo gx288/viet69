@@ -11,13 +11,19 @@
     {
       "name": "Châu Á",
       "url": "https://heovl.moe/categories/chau-a"
+    },
+    {
+      "name": "Phim Sex Hàn Quốc",
+      "url": "https://heovl.moe/categories/phim-sex-han-quoc"
     }
   ],
   "NUM_THREADS": 6,
   "DETAIL_DELAY": 0.8,
   "DATA_FOLDER": "data",
-  "TEMP_CSV": "temp_videos.csv",
-  "SCOPE": ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"],
+  "SCOPE": [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+  ],
   "CREDENTIALS_FILE": "credentials.json",
-  "SHEET_ID": "1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU",   // Thay bằng ID thật của bạn
+  "SHEET_ID": "1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU"  
 }
