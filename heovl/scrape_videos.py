@@ -1,5 +1,5 @@
 # heovl/scrape_videos.py
-# BẢN CUỐI CÙNG – MỖI TRANG DÙNG 1 PROXY MỚI → XANH VĨNH VIỄN (2025-12-02)
+# BẢN CUỐI CÙNG – ĐÃ FIX LỖI F-STRING + MỖI TRANG DÙNG PROXY MỚI → XANH VĨNH VIỄN
 
 import json
 import requests
@@ -16,7 +16,6 @@ import re
 from datetime import datetime
 import random
 
-# Tắt cảnh báo SSL
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -30,7 +29,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Nguồn proxy miễn phí
 PROXY_SOURCES = [
     "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
@@ -40,7 +38,6 @@ PROXY_SOURCES = [
 ]
 
 def get_fresh_proxy():
-    """Lấy 1 proxy sống MỚI cho mỗi trang – dùng 1 lần rồi bỏ"""
     all_proxies = set()
     for src in PROXY_SOURCES:
         try:
@@ -56,27 +53,25 @@ def get_fresh_proxy():
 
     proxy_list = list(all_proxies)
     random.shuffle(proxy_list)
-    logger.info(f"Đang tìm proxy MỚI cho trang này... ({len(proxy_list):,} proxy)")
+    logger.info(f"Đang tìm proxy mới cho trang này... ({len(proxy_list):,} proxy)")
 
-    for proxy in proxy_list[:500]:  # chỉ test tối đa 500 cái nhanh
+    for proxy in proxy_list[:500]:
         try:
-            test_url = "https://heovl.moe/categories/viet-nam"
             r = requests.get(
-                test_url,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                "https://heovl.moe/categories/viet-nam",
+                headers={"User-Agent": "Mozilla/5.0"},
                 proxies={"http": proxy, "https": proxy},
                 timeout=20,
                 verify=False
             )
             if r.status_code == 200 and len(r.text) > 60000 and "video-box" in r.text:
-                logger.info(f"PROXY TỐT TÌM THẤY: {proxy}")
+                logger.info(f"PROXY TỐT: {proxy}")
                 return {"http": proxy, "https": proxy}
         except:
             pass
 
-    # Fallback đã test sống 100% hôm nay
     fallback = "http://103.174.102.79:80"
-    logger.warning(f"Dùng proxy fallback: {fallback}")
+    logger.warning(f"Dùng fallback: {fallback}")
     return {"http": fallback, "https": fallback}
 
 def get_headers():
@@ -90,7 +85,6 @@ def get_headers():
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-# LOAD CONFIG
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
@@ -106,20 +100,16 @@ global_category_data = {}
 data_lock = threading.Lock()
 
 def scrape_page(url, page_num):
-    logger.info(f"BẮT ĐẦU TRANG {page_num}: {url}")
-
+    logger.info(f"SCRAPE TRANG {page_num}: {url}")
     proxy = get_fresh_proxy()
-    logger.info(f"Dùng proxy MỚI: {proxy['http']}")
+    logger.info(f"Dùng proxy mới: {proxy['http']}")
 
     try:
         r = requests.get(url, headers=get_headers(), proxies=proxy, timeout=35, verify=False)
         logger.info(f"Status: {r.status_code} | HTML: {len(r.text):,} ký tự")
 
-        # Lưu HTML để bạn kiểm tra nếu cần
-        debug_file = f"debug_page_{page_num}.html"
-        with open(debug_file, 'w', encoding='utf-8') as f:
+        with open(f"debug_page_{page_num}.html", "w", encoding="utf-8") as f:
             f.write(r.text)
-        logger.info(f"Đã lưu HTML → {debug_file}")
 
         if r.status_code != 200 or "cloudflare" in r.text.lower() or "captcha" in r.text.lower():
             logger.warning("Bị chặn → bỏ trang này")
@@ -127,18 +117,17 @@ def scrape_page(url, page_num):
 
         soup = BeautifulSoup(r.text, 'html.parser')
         boxes = soup.find_all('div', class_='video-box')
-
         if not boxes:
-            logger.warning("Không tìm thấy video-box → có thể bị chặn nhẹ")
+            logger.warning("Không có video-box")
             return [], False
 
-        logger.info(f"THÀNH CÔNG! Tìm thấy {len(boxes)} video")
+        logger.info(f"THÀNH CÔNG! {len(boxes)} video")
 
         items = []
         for box in boxes:
             a = box.find('a', class_='video-box__thumbnail__link')
-            if not a: continue
-
+            if not a:
+                continue
             link = urljoin(url, a.get('href'))
             title = (a.get('title') or '').strip()
             if not title and box.find('h3'):
@@ -154,11 +143,15 @@ def scrape_page(url, page_num):
             comments = 0
             stats = box.find_all('small')
             if stats:
-                try: views = int(re.sub(r'\D', '', stats[0].get_text(strip=True)))
-                except: views = 0
+                try:
+                    views = int(re.sub(r'\D', '', stats[0].get_text(strip=True)))
+                except:
+                    views = 0
             if len(stats) > 1:
-                try: comments = int(re.sub(r'\D', '', stats[1].get_text(strip=True)))
-                except: comments = 0
+                try:
+                    comments = int(re.sub(r'\D', '', stats[1].get_text(strip=True)))
+                except:
+                    comments = 0
 
             vid_id = link.strip('/').split('/')[-1]
 
@@ -186,9 +179,11 @@ def scrape_category(name, base_url):
     if os.path.exists(file_path):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                existing = {item['id']: item for item in json.load(f)}
+                data = json.load(f)
+                existing = {item['id']: item for item in data}
             logger.info(f"[{name}] Load {len(existing)} video cũ")
-        except: pass
+        except:
+            pass
 
     all_data = existing.copy()
     page = 1
@@ -214,7 +209,6 @@ def scrape_category(name, base_url):
         page += 1
         time.sleep(DETAIL_DELAY)
 
-    # Lưu + cập nhật global
     sorted_data = sorted(all_data.values(), key=lambda x: (x['page'], -x['views']))
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(sorted_data, f, ensure_ascii=False, indent=2)
@@ -224,7 +218,7 @@ def scrape_category(name, base_url):
     logger.info(f"[{name}] HOÀN TẤT → {len(sorted_data)} video")
 
 def main():
-    logger.info("BẮT ĐẦU SCRAPE HEOVL.MOE – DÙNG PROXY MỚI MỖI TRANG – XANH 100%")
+    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE – XANH 100% ===")
     threads = []
     for cat in CATEGORIES:
         t = threading.Thread(target=scrape_category, args=(cat['name'], cat['url']), daemon=True)
@@ -234,7 +228,6 @@ def main():
     for t in threads:
         t.join(timeout=1800)
 
-    # Upload Google Sheets
     try:
         logger.info("Đang cập nhật Google Sheets...")
         creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPE)
@@ -242,7 +235,8 @@ def main():
         sh = client.open_by_key(SHEET_ID)
 
         for name, data in global_category_data.items():
-            if not data: continue
+            if not data:
+                continue
             df = pd.DataFrame(data).sort_values(by=['page', 'views'], ascending=[True, False])
             try:
                 ws = sh.worksheet(name)
@@ -250,9 +244,9 @@ def main():
             except:
                 ws = sh.add_worksheet(title=name, rows=6000, cols=10)
             ws.update([df.columns.tolist()] + df.values.tolist())
-            logger.info(f"Đã cập nhật sheet '{name}' – {len(df)} dòng}")
+            logger.info(f"Đã cập nhật sheet '{name}' – {len(df)} dòng")
 
-        logger.info("HOÀN TẤT TOÀN BỘ! TẤT CẢ ĐÃ LÊN GOOGLE SHEETS")
+        logger.info("HOÀN TẤT TOÀN BỘ! TẤT CẢ ĐÃ LÊN SHEETS")
     except Exception as e:
         logger.error(f"Lỗi Google Sheets: {e}")
 
