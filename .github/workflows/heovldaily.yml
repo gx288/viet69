@@ -31,6 +31,13 @@ jobs:
         run: |
           echo "$GOOGLE_CREDENTIALS" > heovl/credentials.json
 
+      # THÊM DÒNG NÀY để xóa file credentials trước khi commit
+      - name: Remove credentials file before commit
+        if: always()
+        run: |
+          rm -f heovl/credentials.json
+          echo "credentials.json đã bị xóa để tránh bị chặn push"
+
       - name: Run scraper (inside heovl folder)
         working-directory: heovl
         run: |
