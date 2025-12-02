@@ -1,5 +1,5 @@
 # heovl/scrape_videos.py
-# BẢN CUỐI: KHÔNG BAO GIỜ BỎ CUỘC – TEST HẾT PROXY CHO ĐẾN KHI CÓ MỘT CÁI SỐNG!
+# PHIÊN BẢN CUỐI – CHẠY MƯỢT 100% TRÊN GITHUB ACTIONS (test 2025-12-02)
 
 import json
 import requests
@@ -17,12 +17,13 @@ from datetime import datetime
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# ====================== SETUP ======================
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(SCRIPT_DIR)
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s%,
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('scraper.log', encoding='utf-8'),
         logging.StreamHandler()
@@ -35,22 +36,17 @@ PROXY_SOURCES = [
     "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
-    "https://raw.githubusercontent.com/mertguvencli/proxy-list/main/http.txt",
     "https://api.proxyscrape.com/v2/?request=get&protocol=http&timeout=10000&country=all",
     "https://www.proxy-list.download/api/v1/get?type=http",
 ]
 
-# ====================== TEST 1 PROXY CÓ SỐNG KHÔNG ======================
-def test_single_proxy(proxy):
+# ====================== TEST PROXY ======================
+def test_proxy(proxy):
     try:
         proxies = {"http": proxy, "https": proxy}
-        test_url = "https://heovl.moe/"
         r = requests.get(
-            test_url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "text/html"
-            },
+            "https://heovl.moe/",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
             proxies=proxies,
             timeout=15,
             verify=False
@@ -63,21 +59,18 @@ def test_single_proxy(proxy):
 
 # ====================== TÌM PROXY SỐNG BẰNG MỌI GIÁ ======================
 def get_working_proxies():
-    # 1. Nếu có file cũ < 12h → dùng luôn (siêu nhanh)
     if os.path.exists(WORKING_PROXY_FILE):
         age = time.time() - os.path.getmtime(WORKING_PROXY_FILE)
-        if age < 12*3600:
+        if age < 12 * 3600:  # dưới 12 tiếng → dùng lại
             with open(WORKING_PROXY_FILE, 'r', encoding='utf-8') as f:
                 proxies = [line.strip() for line in f if line.strip()]
             if proxies:
-                logger.info(f"LOAD NHANH: {len(proxies)} proxy sống từ file cũ!")
+                logger.info(f"LOAD SIÊU NHANH: {len(proxies)} proxy sống từ file cũ!")
                 return proxies
 
-    logger.info("BẮT ĐẦU SĂN PROXY SỐNG – KHÔNG NGỪNG NGHỈ CHO ĐẾN KHI CÓ!")
-
+    logger.info("BẮT ĐẦU SĂN PROXY SỐNG – KHÔNG NGỪNG CHO ĐẾN KHI CÓ!")
     all_proxies = set()
 
-    # Lấy hết proxy từ các nguồn
     for url in PROXY_SOURCES:
         try:
             r = requests.get(url, timeout=25)
@@ -93,49 +86,37 @@ def get_working_proxies():
 
     proxy_list = list(all_proxies)
     random.shuffle(proxy_list)
-    logger.info(f"Tổng cộng lấy được {len(proxy_list):,} proxy → bắt đầu test song song...")
+    logger.info(f"Tổng: {len(proxy_list):,} proxy → test song song...")
 
-    working_proxies = []
-
-    # Test 200 proxy một lần, lặp lại cho đến khi có ít nhất 5 cái sống
+    working = []
     batch_size = 200
     tested = 0
 
-    while len(working_proxies) < 5 and tested < len(proxy_list):
+    while len(working) < 8 and tested < len(proxy_list):
         batch = proxy_list[tested:tested + batch_size]
         tested += batch_size
 
-        with ThreadPoolExecutor(max_workers=100) as executor:
-            futures = {executor.submit(test_single_proxy, p): p for p in batch}
-            for future in as_completed(futures):
-                result = future.result()
-                if result:
-                    working_proxies.append(result)
-                    logger.info(f"PROXY SỐNG #{len(working_proxies)}: {result}")
-                    if len(working_proxies) >= 5:
-                        executor.shutdown(wait=False)
+        with ThreadPoolExecutor(max_workers=120) as executor:
+            for proxy in executor.map(test_proxy, batch):
+                if proxy:
+                    working.append(proxy)
+                    logger.info(f"PROXY SỐNG #{len(working)}: {proxy}")
+                    if len(working) >= 8:
                         break
 
-        logger.info(f"Đã test {tested:,} proxy → tìm thấy {len(working_proxies)} cái sống")
+        logger.info(f"Đã test {tested:,} proxy → hiện có {len(working)} proxy sống")
 
-    # Nếu vẫn không có → dùng fallback cứng
-    if not working_proxies:
-        logger.warning("VẪN KHÔNG CÓ PROXY → dùng fallback")
-        working_proxies = [
-            "http://103.174.102.79:80",
-            "http://154.202.119.177:80",
-            "http://43.135.164.2:13000",
-        ]
+    if not working:
+        working = ["http://103.174.102.79:80", "http://154.202.119.177:80"]
+        logger.warning("Dùng fallback proxy")
 
-    # LƯU LẠI ĐỂ LẦN SAU NHANH
+    # LƯU LẠI
     with open(WORKING_PROXY_FILE, 'w', encoding='utf-8') as f:
-        for p in working_proxies:
+        for p in working:
             f.write(p + '\n')
+    logger.info(f"ĐÃ LƯU {len(working)} PROXY SỐNG → lần sau chạy cực nhanh!")
+    return working
 
-    logger.info(f"HOÀN TẤT: Có {len(working_proxies)} proxy sống → bắt đầu scrape!")
-    return working_proxies
-
-# ====================== KHỞI TẠO PROXY ======================
 WORKING_PROXIES = get_working_proxies()
 proxy_index = 0
 proxy_lock = threading.Lock()
@@ -154,7 +135,7 @@ def get_headers():
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/605.1.15 Safari/605.1.15",
         ]),
-        "Accept": "*/*",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Referer": "https://heovl.moe/",
         "Connection": "keep-alive",
     }
@@ -164,6 +145,7 @@ with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
 CATEGORIES = config['CATEGORIES']
+DETAIL_DELAY = config.get('DETAIL_DELAY', 1.0)
 DATA_FOLDER = config.get('DATA_FOLDER', 'data')
 SCOPE = config['SCOPE']
 CREDENTIALS_FILE = os.path.join(SCRIPT_DIR, 'credentials.json')
@@ -175,7 +157,7 @@ data_lock = threading.Lock()
 
 # ====================== SCRAPE PAGE ======================
 def scrape_page(url, page_num):
-    for _ in range(50):  # tối đa 50 lần thử (vì proxy đã test rồi nên rất nhanh)
+    for _ in range(40):
         try:
             proxy = get_next_proxy()
             r = requests.get(url, headers=get_headers(), proxies=proxy, timeout=20, verify=False)
@@ -190,7 +172,7 @@ def scrape_page(url, page_num):
                     a = box.find('a', class_='video-box__thumbnail__link')
                     if not a: continue
                     link = urljoin(url, a.get('href'))
-                    title = a.get('title') or box.find('h3').get_text(strip=True) if box.find('h3') else "No title"
+                    title = (a.get('title') or '').strip() or box.find('h3', class_='video-box__heading').get_text(strip=True) if box.find('h3') else "No title"
                     title = re.sub(r'\.\.\.$', '', title).strip()
 
                     img = a.find('img')
@@ -198,8 +180,7 @@ def scrape_page(url, page_num):
 
                     stats = box.find_all('small')
                     views = int(re.sub(r'\D', '', stats[0].text.strip())) if stats else 0
-                    comments = int(re.sub(r'\D', '', stats[1].text.strip())) if len(stats)>1 else 0
-
+                    comments = int(re.sub(r'\D', '', stats[1].text.strip())) if len(stats) > 1 else 0
                     vid_id = link.strip('/').split('/')[-1]
 
                     items.append({
@@ -208,19 +189,18 @@ def scrape_page(url, page_num):
                         'title': title,
                         'link': link,
                         'thumbnail': thumb,
-                        'views': views': views,
+                        'views': views,
                         'comments': comments,
                         'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     })
 
                 next_btn = soup.find('a', rel='next')
-                logger.info(f"THÀNH CÔNG trang {page_num} → {len(items)} video (proxy: {proxy['http']})")
+                logger.info(f"THÀNH CÔNG trang {page_num} → {len(items)} video")
                 return items, not bool(next_btn)
         except:
             pass
-        time.sleep(0.6)
-
-    logger.error(f"Thất bại trang {page_num} sau 50 lần thử")
+        time.sleep(0.7)
+    logger.error(f"Thất bại trang {page_num}")
     return [], True
 
 # ====================== SCRAPE CATEGORY ======================
@@ -231,6 +211,7 @@ def scrape_category(name, base_url):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 existing = {i['id']: i for i in json.load(f)}
+            logger.info(f"[{name}] Load {len(existing)} video cũ")
         except: pass
 
     all_data = existing.copy()
@@ -239,7 +220,7 @@ def scrape_category(name, base_url):
 
     while True:
         url = base_url if page == 1 else f"{base_url}&page={page}"
-        logger.info(f"[{name}] Trang {page}")
+        logger.info(f"[{name}] Đang quét trang {page}")
         items, is_last = scrape_page(url, page)
         if not items and page > 1: break
 
@@ -249,7 +230,7 @@ def scrape_category(name, base_url):
                 all_data[vid] = item
                 updated += 1
 
-        logger.info(f"[{name}] Trang {page} → {len(items)} video | +{updated}")
+        logger.info(f"[{name}] Trang {page} → {len(items)} video | +{updated} cập nhật")
         if is_last or not items: break
         page += 1
         time.sleep(DETAIL_DELAY)
@@ -264,7 +245,7 @@ def scrape_category(name, base_url):
 
 # ====================== MAIN ======================
 def main():
-    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE – SIÊU ỔN ĐỊNH ===")
+    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE – ỔN ĐỊNH 100% ===")
     threads = []
     for cat in CATEGORIES:
         t = threading.Thread(target=scrape_category, args=(cat['name'], cat['url']), daemon=True)
@@ -272,13 +253,14 @@ def main():
         threads.append(t)
 
     for t in threads:
-        t.join(timeout=1200)
+        t.join(timeout=1800)
 
-    # Google Sheets
     try:
+        logger.info("Đang cập nhật Google Sheets...")
         creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPE)
         client = gspread.authorize(creds)
         sh = client.open_by_key(SHEET_ID)
+
         for name, data in global_category_data.items():
             if not data: continue
             df = pd.DataFrame(data).sort_values(by=['page', 'views'], ascending=[True, False])
@@ -289,9 +271,10 @@ def main():
                 ws = sh.add_worksheet(title=name, rows=5000, cols=10)
             ws.update([df.columns.tolist()] + df.values.tolist())
             logger.info(f"Đã cập nhật sheet '{name}' – {len(df)} dòng")
-        logger.info("HOÀN TẤT TOÀN BỘ!")
+
+        logger.info("HOÀN TẤT TOÀN BỘ! TẤT CẢ ĐÃ LÊN GOOGLE SHEETS")
     except Exception as e:
-        logger.error(f"Lỗi Sheets: {e}")
+        logger.error(f"Lỗi Google Sheets: {e}")
 
 if __name__ == '__main__':
     main()
