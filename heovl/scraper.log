@@ -1,0 +1,27 @@
+2025-12-02 04:24:02,603 - INFO - === BẮT ĐẦU SCRAPE HEOVL.MOE ===
+2025-12-02 04:24:02,604 - INFO - [JAV] Đang quét trang 1
+2025-12-02 04:24:02,604 - INFO - [Việt Nam] Đang quét trang 1
+2025-12-02 04:24:02,604 - INFO - [Châu Á] Đang quét trang 1
+2025-12-02 04:24:02,606 - WARNING - Error occurred during getting browser(s): random, but was suppressed with fallback.
+2025-12-02 04:24:02,607 - WARNING - Error occurred during getting browser(s): random, but was suppressed with fallback.
+2025-12-02 04:24:02,608 - WARNING - Error occurred during getting browser(s): random, but was suppressed with fallback.
+2025-12-02 04:24:02,608 - INFO - [Phim Sex Hàn Quốc] Đang quét trang 1
+2025-12-02 04:24:02,610 - WARNING - Error occurred during getting browser(s): random, but was suppressed with fallback.
+2025-12-02 04:24:02,955 - WARNING - 403 Forbidden tại https://heovl.moe/categories/viet-nam – thử lại với header mới...
+2025-12-02 04:24:02,956 - WARNING - 403 Forbidden tại https://heovl.moe/categories/jav – thử lại với header mới...
+2025-12-02 04:24:02,959 - WARNING - 403 Forbidden tại https://heovl.moe/categories/phim-sex-han-quoc – thử lại với header mới...
+2025-12-02 04:24:02,960 - WARNING - 403 Forbidden tại https://heovl.moe/categories/chau-a – thử lại với header mới...
+2025-12-02 04:24:05,957 - WARNING - Error occurred during getting browser(s): random, but was suppressed with fallback.
+2025-12-02 04:24:05,958 - WARNING - Error occurred during getting browser(s): random, but was suppressed with fallback.
+2025-12-02 04:24:05,961 - WARNING - Error occurred during getting browser(s): random, but was suppressed with fallback.
+2025-12-02 04:24:05,963 - WARNING - Error occurred during getting browser(s): random, but was suppressed with fallback.
+2025-12-02 04:24:06,061 - ERROR - Lỗi khi scrape https://heovl.moe/categories/viet-nam: 403 Client Error: Forbidden for url: https://heovl.moe/categories/viet-nam
+2025-12-02 04:24:06,063 - ERROR - Lỗi khi scrape https://heovl.moe/categories/chau-a: 403 Client Error: Forbidden for url: https://heovl.moe/categories/chau-a
+2025-12-02 04:24:06,066 - ERROR - Lỗi khi scrape https://heovl.moe/categories/jav: 403 Client Error: Forbidden for url: https://heovl.moe/categories/jav
+2025-12-02 04:24:06,067 - ERROR - Lỗi khi scrape https://heovl.moe/categories/phim-sex-han-quoc: 403 Client Error: Forbidden for url: https://heovl.moe/categories/phim-sex-han-quoc
+2025-12-02 04:24:06,068 - INFO - [Việt Nam] HOÀN TẤT – Tổng 0 video (cập nhật 0)
+2025-12-02 04:24:06,069 - INFO - [Châu Á] HOÀN TẤT – Tổng 0 video (cập nhật 0)
+2025-12-02 04:24:06,069 - INFO - [JAV] HOÀN TẤT – Tổng 0 video (cập nhật 0)
+2025-12-02 04:24:06,069 - INFO - [Phim Sex Hàn Quốc] HOÀN TẤT – Tổng 0 video (cập nhật 0)
+2025-12-02 04:24:06,069 - INFO - Đang kết nối Google Sheets...
+2025-12-02 04:24:06,761 - INFO - HOÀN TẤT TOÀN BỘ! Dữ liệu đã lên Google Sheets.
