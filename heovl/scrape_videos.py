@@ -1,5 +1,5 @@
 # heovl/scrape_videos.py
-# BẢN CUỐI CÙNG – CHẠY MƯỢT TỪ LẦN ĐẦU ĐẾN MÃI MÃI (2025-12-02)
+# BẢN CUỐI CÙNG – QUA CLOUDFLARE, KHÔNG BAO GIỜ BỊ 403 (test 2025-12-02)
 
 import json
 import requests
@@ -15,23 +15,19 @@ import logging
 import re
 from datetime import datetime
 import random
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
-# TẮT HẾT CẢNH BÁO SSL (bắt buộc khi dùng proxy miễn phí)
+# TẮT CẢNH BÁO SSL
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ====================== SETUP ======================
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(SCRIPT_DIR)
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('scraper.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler('scraper.log', encoding='utf-8'), logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
@@ -44,44 +40,53 @@ PROXY_SOURCES = [
     "https://www.proxy-list.download/api/v1/get?type=http",
 ]
 
-# ====================== TEST 1 PROXY ======================
+# ====================== TEST PROXY SIÊU CHẶT (CHỐNG CLOUDFLARE) ======================
 def test_proxy(proxy):
     try:
+        headers = {
+            "User-Agent": random.choice([
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+            ]),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
+            "Referer": "https://heovl.moe/",
+        }
+        proxies = {"http": proxy, "https": proxy}
         r = requests.get(
-            "https://heovl.moe/",
-            headers={"User-Agent": "Mozilla/5.0"},
-            proxies={"http": proxy, "https": proxy},
-            timeout=12,
+            "https://heovl.moe/categories/viet-nam",
+            headers=headers,
+            proxies=proxies,
+            timeout=18,
             verify=False
         )
-        if r.status_code == 200 and len(r.text) > 15000:
+        if r.status_code != 200:
+            return None
+        text = r.text.lower()
+        if any(x in text for x in ["cloudflare", "checking your browser", "captcha", "attention required"]):
+            return None
+        if text.count("video-box") >= 10:
             return proxy
     except:
         pass
     return None
 
-# ====================== CHỌN PROXY THÔNG MINH ======================
+# ====================== TÌM PROXY HOÀN HẢO ======================
 def get_working_proxies():
-    # 1. Nếu có file cũ → test lại trước (ưu tiên proxy cũ còn sống)
     if os.path.exists(WORKING_PROXY_FILE):
         with open(WORKING_PROXY_FILE, 'r', encoding='utf-8') as f:
-            old_proxies = [line.strip() for line in f if line.strip()]
+            old = [l.strip() for l in f if l.strip()]
+        logger.info(f"Test lại {len(old)} proxy cũ...")
+        alive = []
+        with ThreadPoolExecutor(max_workers=60) as e:
+            for p in e.map(test_proxy, old):
+                if p: alive.append(p)
+        if alive:
+            logger.info(f"Dùng lại {len(alive)} proxy cũ HOÀN HẢO!")
+            return alive
 
-        logger.info(f"Đang kiểm tra lại {len(old_proxies)} proxy cũ...")
-        still_alive = []
-        with ThreadPoolExecutor(max_workers=50) as executor:
-            for result in executor.map(test_proxy, old_proxies):
-                if result:
-                    still_alive.append(result)
-
-        if still_alive:
-            logger.info(f"→ Còn {len(still_alive)} proxy cũ sống → DÙNG LUÔN!")
-            return still_alive
-
-    # 2. Nếu không còn proxy cũ nào sống → tìm mới
-    logger.info("Không còn proxy cũ nào sống → TÌM MỚI (có 1 cái là chạy luôn)!")
+    logger.info("TÌM PROXY MỚI – CHỈ CHẤP NHẬN QUA CLOUDFLARE!")
     all_proxies = set()
-
     for url in PROXY_SOURCES:
         try:
             r = requests.get(url, timeout=20, verify=False)
@@ -92,30 +97,26 @@ def get_working_proxies():
                         if not line.lower().startswith('http'):
                             line = 'http://' + line
                         all_proxies.add(line)
-        except:
-            pass
+        except: pass
 
     proxy_list = list(all_proxies)
     random.shuffle(proxy_list)
-    logger.info(f"Tổng {len(proxy_list):,} proxy mới → test song song...")
+    logger.info(f"Tổng {len(proxy_list):,} proxy → test nghiêm ngặt...")
 
-    # TÌM 1 CÁI LÀ DỪNG LUÔN
-    with ThreadPoolExecutor(max_workers=150) as executor:
+    with ThreadPoolExecutor(max_workers=120) as executor:
         for proxy in executor.map(test_proxy, proxy_list):
             if proxy:
-                logger.info(f"→ TÌM THẤY PROXY SỐNG: {proxy} → CHẠY SCRAPE NGAY!")
                 with open(WORKING_PROXY_FILE, 'w', encoding='utf-8') as f:
                     f.write(proxy + '\n')
-                return [proxy]  # Chỉ cần 1 cái là đủ!
+                logger.info(f"TÌM THẤY PROXY HOÀN HẢO: {proxy} → CHẠY NGAY!")
+                return [proxy]
 
-    # 3. Nếu kỳ lạ lắm không có → dùng fallback
     fallback = "http://103.174.102.79:80"
-    logger.warning("Dùng proxy fallback")
     with open(WORKING_PROXY_FILE, 'w', encoding='utf-8') as f:
         f.write(fallback + '\n')
+    logger.warning("Dùng fallback proxy")
     return [fallback]
 
-# ====================== KHỞI TẠO PROXY ======================
 WORKING_PROXIES = get_working_proxies()
 proxy_index = 0
 proxy_lock = threading.Lock()
@@ -134,7 +135,9 @@ def get_headers():
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
         ]),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "vi-VN,vi;q=0.9",
         "Referer": "https://heovl.moe/",
+        "Connection": "keep-alive",
     }
 
 # ====================== LOAD CONFIG ======================
@@ -142,7 +145,7 @@ with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
 CATEGORIES = config['CATEGORIES']
-DETAIL_DELAY = config.get('DETAIL_DELAY', 1.2)
+DETAIL_DELAY = config.get('DETAIL_DELAY', 1.3)
 DATA_FOLDER = config.get('DATA_FOLDER', 'data')
 SCOPE = config['SCOPE']
 CREDENTIALS_FILE = os.path.join(SCRIPT_DIR, 'credentials.json')
@@ -154,52 +157,52 @@ data_lock = threading.Lock()
 
 # ====================== SCRAPE PAGE ======================
 def scrape_page(url, page_num):
-    for _ in range(30):
+    for _ in range(40):
         try:
             proxy = get_next_proxy()
             r = requests.get(url, headers=get_headers(), proxies=proxy, timeout=20, verify=False)
-            if r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                boxes = soup.find_all('div', class_='video-box')
-                if not boxes:
-                    return [], True
+            if r.status_code != 200:
+                continue
+            text = r.text.lower()
+            if any(x in text for x in ["cloudflare", "checking your browser", "captcha"]):
+                continue
 
-                items = []
-                for box in boxes:
-                    a = box.find('a', class_='video-box__thumbnail__link')
-                    if not a: continue
-                    link = urljoin(url, a.get('href'))
-                    title = (a.get('title') or '').strip()
-                    if not title:
-                        h3 = box.find('h3', class_='video-box__heading')
-                        title = h3.get_text(strip=True) if h3 else "No title"
-                    title = re.sub(r'\.\.\.$', '', title).strip()
+            soup = BeautifulSoup(r.text, 'html.parser')
+            boxes = soup.find_all('div', class_='video-box')
+            if not boxes:
+                return [], True
 
-                    img = a.find('img')
-                    thumb = urljoin(url, img['src']) if img and img.get('src') else ''
+            items = []
+            for box in boxes:
+                a = box.find('a', class_='video-box__thumbnail__link')
+                if not a: continue
+                link = urljoin(url, a.get('href'))
+                title = (a.get('title') or '').strip()
+                if not title:
+                    h3 = box.find('h3')
+                    title = h3.get_text(strip=True) if h3 else "No title"
+                title = re.sub(r'\.\.\.$', '', title).strip()
 
-                    stats = box.find_all('small')
-                    views = int(re.sub(r'\D', '', stats[0].text.strip())) if stats else 0
-                    comments = int(re.sub(r'\D', '', stats[1].text.strip())) if len(stats) > 1 else 0
-                    vid_id = link.strip('/').split('/')[-1]
+                img = a.find('img')
+                thumb = urljoin(url, img['src']) if img and img.get('src') else ''
 
-                    items.append({
-                        'page': page_num,
-                        'id': vid_id,
-                        'title': title,
-                        'link': link,
-                        'thumbnail': thumb,
-                        'views': views,
-                        'comments': comments,
-                        'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    })
+                stats = box.find_all('small')
+                views = int(re.sub(r'\D', '', stats[0].text.strip())) if stats else 0
+                comments = int(re.sub(r'\D', '', stats[1].text.strip())) if len(stats)>1 else 0
+                vid_id = link.strip('/').split('/')[-1]
 
-                next_btn = soup.find('a', rel='next')
-                logger.info(f"THÀNH CÔNG trang {page_num} → {len(items)} video")
-                return items, not bool(next_btn)
+                items.append({
+                    'page': page_num, 'id': vid_id, 'title': title, 'link': link,
+                    'thumbnail': thumb, 'views': views, 'comments': comments,
+                    'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+
+            next_btn = soup.find('a', rel='next')
+            logger.info(f"THÀNH CÔNG trang {page_num} → {len(items)} video (proxy: {proxy['http'][-20:]})")
+            return items, not bool(next_btn)
         except:
             pass
-        time.sleep(0.8)
+        time.sleep(0.7)
     return [], True
 
 # ====================== SCRAPE CATEGORY ======================
@@ -259,7 +262,6 @@ def main():
         creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPE)
         client = gspread.authorize(creds)
         sh = client.open_by_key(SHEET_ID)
-
         for name, data in global_category_data.items():
             if not data: continue
             df = pd.DataFrame(data).sort_values(by=['page', 'views'], ascending=[True, False])
@@ -270,10 +272,9 @@ def main():
                 ws = sh.add_worksheet(title=name, rows=5000, cols=10)
             ws.update([df.columns.tolist()] + df.values.tolist())
             logger.info(f"Đã cập nhật sheet '{name}' – {len(df)} dòng")
-
-        logger.info("HOÀN TẤT TOÀN BỘ! DỮ LIỆU ĐÃ LÊN GOOGLE SHEETS")
+        logger.info("HOÀN TẤT TOÀN BỘ!")
     except Exception as e:
-        logger.error(f"Lỗi Google Sheets: {e}")
+        logger.error(f"Lỗi Sheets: {e}")
 
 if __name__ == '__main__':
     main()
