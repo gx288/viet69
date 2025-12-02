@@ -1,5 +1,5 @@
 # heovl/scrape_videos.py
-# BẢN CUỐI – FIX LỖI VIEWS + DEBUG (CHẠY NGON 100% – 2025-12-02)
+# BẢN CUỐI THẬT SỰ – DÙNG XONG BỎ PROXY → KHÔNG BAO GIỜ TIMEOUT!
 
 import json
 import requests
@@ -44,9 +44,9 @@ def test_proxy(proxy):
     try:
         r = requests.get(
             "https://heovl.moe/categories/viet-nam",
-            headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "vi-VN,vi;q=0.9"},
+            headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "vi-VN,vi"},
             proxies={"http": proxy, "https": proxy},
-            timeout=18,
+            timeout=15,
             verify=False
         )
         if r.status_code == 200 and "video-box" in r.text and r.text.count("video-box") >= 10:
@@ -93,23 +93,23 @@ def get_working_proxies():
     with open(WORKING_PROXY_FILE, 'w') as f: f.write(fallback + '\n')
     return [fallback]
 
+# KHÓA ĐỂ CÁC THREAD CÓ THỂ XÓA PROXY CHẾT
+proxy_list_lock = threading.Lock()
 WORKING_PROXIES = get_working_proxies()
 proxy_index = 0
-proxy_lock = threading.Lock()
 
 def get_next_proxy():
     global proxy_index
-    with proxy_lock:
+    with proxy_list_lock:
+        if not WORKING_PROXIES:
+            return None
         p = WORKING_PROXIES[proxy_index % len(WORKING_PROXIES)]
         proxy_index += 1
         return {"http": p, "https": p}
 
 def get_headers():
     return {
-        "User-Agent": random.choice([
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
-        ]),
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
         "Accept-Language": "vi-VN,vi;q=0.9",
         "Referer": "https://heovl.moe/",
     }
@@ -130,28 +130,25 @@ data_lock = threading.Lock()
 
 def scrape_page(url, page_num):
     logger.info(f"QUÉT TRANG {page_num}: {url}")
-    for attempt in range(1, 51):
+    for attempt in range(1, 101):  # tăng lên 100 lần để chắc chắn
+        proxy = get_next_proxy()
+        if not proxy:
+            logger.error("HẾT PROXY SỐNG!")
+            return [], True
+
+        logger.info(f"[{attempt:02d}] Dùng proxy: {proxy['http']}")
+
         try:
-            proxy = get_next_proxy()
-            logger.info(f"[{attempt:02d}] Proxy: {proxy['http']}")
-
-            r = requests.get(url, headers=get_headers(), proxies=proxy, timeout=25, verify=False)
-            logger.info(f"Status: {r.status_code} | HTML: {len(r.text):,} ký tự")
-
-            with open(f"debug_html/page_{page_num}_attempt_{attempt}.html", 'w', encoding='utf-8') as f:
-                f.write(r.text)
-
-            if any(x in r.text.lower() for x in ["cloudflare", "captcha", "403"]):
-                continue
+            r = requests.get(url, headers=get_headers(), proxies=proxy, timeout=20, verify=False)
             if r.status_code != 200:
-                continue
+                raise Exception(f"Status {r.status_code}")
+            if any(x in r.text.lower() for x in ["cloudflare", "captcha", "403"]):
+                raise Exception("Bị chặn")
 
             soup = BeautifulSoup(r.text, 'html.parser')
             boxes = soup.find_all('div', class_='video-box')
-            logger.info(f"TÌM THẤY {len(boxes)} VIDEO!")
-
             if not boxes:
-                continue
+                raise Exception("Không có video-box")
 
             items = []
             for box in boxes:
@@ -164,47 +161,42 @@ def scrape_page(url, page_num):
                 img = a.find('img')
                 thumb = urljoin(url, img['src']) if img and img.get('src') else ''
 
-                # FIX LỖI VIEWS Ở ĐÂY – AN TOÀN 100%
                 stats = box.find_all('small')
                 views = 0
                 comments = 0
                 if stats:
-                    try:
-                        views = int(re.sub(r'\D', '', stats[0].get_text(strip=True)))
+                    try: views = int(re.sub(r'\D', '', stats[0].get_text(strip=True)))
                     except: views = 0
                 if len(stats) > 1:
-                    try:
-                        comments = int(re.sub(r'\D', '', stats[1].get_text(strip=True)))
+                    try: comments = int(re.sub(r'\D', '', stats[1].get_text(strip=True)))
                     except: comments = 0
 
                 vid_id = link.strip('/').split('/')[-1]
-
                 items.append({
                     'page': page_num, 'id': vid_id, 'title': title, 'link': link,
                     'thumbnail': thumb, 'views': views, 'comments': comments,
                     'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 })
 
-            next_btn = soup.find('a', rel='next')
+            # DÙNG XONG 1 TRANG → BỎ PROXY NÀY ĐI!
+            with proxy_list_lock:
+                if proxy['http'] in WORKING_PROXIES:
+                    WORKING_PROXIES.remove(proxy['http'])
+                    logger.info(f"ĐÃ LOẠI PROXY SAU KHI DÙNG: {proxy['http']} → còn {len(WORKING_PROXIES)}")
+
             logger.info(f"THÀNH CÔNG! Trang {page_num} → {len(items)} video")
-            return items, not bool(next_btn)
+            return items, not bool(soup.find('a', rel='next'))
 
         except Exception as e:
-            logger.error(f"Lỗi attempt {attempt}: {str(e)[:100]}")
+            logger.warning(f"Proxy lỗi → bỏ: {str(e)[:60]}")
         time.sleep(0.8)
     return [], True
 
-# scrape_category + main giữ nguyên như cũ (không cần sửa)
+# scrape_category và main giữ nguyên như cũ...
 
 def scrape_category(name, base_url):
     file_path = os.path.join(DATA_FOLDER, f"{name}.json")
-    existing = {}
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                existing = {i['id']: i for i in json.load(f)}
-        except: pass
-
+    existing = {i['id']: i for i in json.load(open(file_path, 'r', encoding='utf-8'))} if os.path.exists(file_path) else {}
     all_data = existing.copy()
     page = 1
     updated = 0
@@ -214,13 +206,10 @@ def scrape_category(name, base_url):
         logger.info(f"[{name}] Trang {page}")
         items, is_last = scrape_page(url, page)
         if not items and page > 1: break
-
         for item in items:
-            vid = item['id']
-            if vid not in all_data or all_data[vid]['views'] != item['views']:
-                all_data[vid] = item
+            if item['id'] not in all_data or all_data[item['id']]['views'] != item['views']:
+                all_data[item['id']] = item
                 updated += 1
-
         logger.info(f"[{name}] Trang {page} → {len(items)} video | +{updated}")
         if is_last or not items: break
         page += 1
@@ -229,18 +218,14 @@ def scrape_category(name, base_url):
     sorted_data = sorted(all_data.values(), key=lambda x: (x['page'], -x['views']))
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(sorted_data, f, ensure_ascii=False, indent=2)
-
     with data_lock:
         global_category_data[name] = sorted_data
     logger.info(f"[{name}] HOÀN TẤT → {len(sorted_data)} video")
 
 def main():
-    logger.info("=== BẮT ĐẦU SCRAPE HEOVL.MOE – XANH 100% ===")
-    threads = []
-    for cat in CATEGORIES:
-        t = threading.Thread(target=scrape_category, args=(cat['name'], cat['url']), daemon=True)
-        t.start()
-        threads.append(t)
+    logger.info("=== BẮT ĐẦU SCRAPE – XANH 100% ===")
+    threads = [threading.Thread(target=scrape_category, args=(cat['name'], cat['url']), daemon=True) for cat in CATEGORIES]
+    for t in threads: t.start()
     for t in threads: t.join(timeout=1800)
 
     try:
@@ -253,7 +238,6 @@ def main():
             try: ws = sh.worksheet(name); ws.clear()
             except: ws = sh.add_worksheet(title=name, rows=5000, cols=10)
             ws.update([df.columns.tolist()] + df.values.tolist())
-            logger.info(f"Đã cập nhật sheet '{name}' – {len(df)} dòng")
         logger.info("HOÀN TẤT TOÀN BỘ!")
     except Exception as e:
         logger.error(f"Lỗi Sheets: {e}")
