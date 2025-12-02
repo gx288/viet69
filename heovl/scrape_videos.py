@@ -1,6 +1,3 @@
-# heovl/scrape_videos.py
-# Version: FIXED 2025-12-02 – 100% chạy được trên GitHub Actions
-
 import json
 import requests
 from bs4 import BeautifulSoup
@@ -14,14 +11,12 @@ from urllib.parse import urljoin
 import logging
 import re
 from datetime import datetime
-from fake_useragent import UserAgent
 import random
 
-# ====================== SETUP PATH ======================
+# ====================== PATH & LOGGING ======================
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-os.chdir(SCRIPT_DIR)  # Đảm bảo chạy trong thư mục heovl/
+os.chdir(SCRIPT_DIR)
 
-# ====================== LOGGING ======================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -32,23 +27,150 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ====================== LOAD CONFIG ======================
+# ====================== TỰ ĐỘNG LẤY PROXY MỚI HÀNG NGÀY ======================
+PROXY_SOURCES = [
+    "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
+    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+    "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
+    "https://raw.githubusercontent.com/mertguvencli/proxy-list/main/http.txt",
+    "https://raw.githubusercontent.com/yokelvin9/proxy-list/main/http.txt",
+    "https://api.proxyscrape.com/v2/?request=get&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
+    "https://www.proxy-list.download/api/v1/get?type=http",
+]
+
+def fetch_fresh_proxies():
+    proxies = set()
+    for url in PROXY_SOURCES:
+        try:
+            logger.info(f"Đang lấy proxy từ {url.split('/')[-2] if '/' in url else url}...")
+            r = requests.get(url, timeout=15)
+            if r.status_code == 200:
+                lines = r.text.strip().splitlines()
+                for line in lines:
+                    line = line.strip()
+                    if line and ':' in line and not line.startswith('#'):
+                        if not line.startswith('http'):
+                            line = 'http://' + line
+                        proxies.add(line)
+        except Exception as e:
+            logger.warning(f"Không lấy được proxy từ {url}: {e}")
+        time.sleep(1)
+
+    proxy_list = list(proxies)
+    logger.info(f"Đã tải thành công {len(proxy_list)} proxy mới!")
+    return proxy_list
+
+# Lấy proxy mới mỗi lần chạy
 try:
-    with open(os.path.join(SCRIPT_DIR, 'config.json'), 'r', encoding='utf-8') as f:
-        config = json.load(f)
-except Exception as e:
-    logger.error(f"Không đọc được config.json: {e}")
-    raise
+    WORKING_PROXIES = fetch_fresh_proxies()
+    if not WORKING_PROXIES:
+        raise Exception("Không lấy được proxy nào")
+except:
+    logger.error("Lấy proxy thất bại → dùng fallback")
+    WORKING_PROXIES = [
+        "http://154.202.119.177:80",
+        "http://103.174.102.79:80",
+        "http://43.135.164.2:13000",
+        "http://47.74.152.29:8888",
+        "http://156.236.74.247:80",
+        "http://43.153.207.93:3128",
+    ]
+
+random.shuffle(WORKING_PROXIES)
+
+def get_next_proxy():
+    """Lấy proxy tiếp theo (vòng lặp)"""
+    while True:
+        for proxy in WORKING_PROXIES:
+            yield {"http": proxy, "https": proxy}
+        time.sleep(5)  # nếu hết thì đợi 5s rồi lặp lại
+
+proxy_generator = get_next_proxy()
+
+# ====================== HEADERS ======================
+def get_headers():
+    agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/605.1.15 Safari/605.1.15",
+    ]
+    return {
+        "User-Agent": random.choice(agents),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
+        "Referer": "https://heovl.moe/",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    }
+
+# ====================== LOAD CONFIG ======================
+with open('config.json', 'r', encoding='utf-8') as f:
+    config = json.load(f)
 
 CATEGORIES = config['CATEGORIES']
-NUM_THREADS = config.get('NUM_THREADS', 6)
-DETAIL_DELAY = config.get('DETAIL_DELAY', 1.0)
+DETAIL_DELAY = config.get('DETAIL_DELAY', 1.2)
 DATA_FOLDER = config.get('DATA_FOLDER', 'data')
 SCOPE = config['SCOPE']
-CREDENTIALS_FILE = os.path.join(SCRIPT_DIR, 'credentials.json')  # ← Full path
+CREDENTIALS_FILE = os.path.join(SCRIPT_DIR, 'credentials.json')
 SHEET_ID = config['SHEET_ID']
-
 os.makedirs(DATA_FOLDER, exist_ok=True)
+
+# ====================== SCRAPE PAGE VỚI PROXY VÒNG ======================
+def scrape_page(url, page_num):
+    for attempt in range(15):  # thử tối đa 15 proxy
+        try:
+            proxy = next(proxy_generator)
+            r = requests.get(
+                url,
+                headers=get_headers(),
+                proxies=proxy,
+                timeout=20,
+                verify=False  # một số proxy cần tắt SSL verify
+            )
+            if r.status_code == 200:
+                soup = BeautifulSoup(r.text, 'html.parser')
+                boxes = soup.find_all('div', class_='video-box')
+                if not boxes:
+                    return [], True
+
+                items = []
+                for box in boxes:
+                    a = box.find('a', class_='video-box__thumbnail__link')
+                    if not a: continue
+                    link = urljoin(url, a.get('href'))
+                    title = a.get('title') or box.find('h3').get_text(strip=True) if box.find('h3') else "No title"
+                    title = re.sub(r'\.\.\.$', '', title).strip()
+
+                    img = a.find('img')
+                    thumb = urljoin(url, img['src']) if img and img.get('src') else ''
+
+                    stats = box.find_all('small')
+                    views = int(re.sub(r'\D', '', stats[0].text)) if stats else 0
+                    comments = int(re.sub(r'\D', '', stats[1].text)) if len(stats)>1 else 0
+
+                    vid = link.strip('/').split('/')[-1]
+
+                    items.append({
+                        'page': page_num,
+                        'id': vid,
+                        'title': title,
+                        'link': link,
+                        'thumbnail': thumb,
+                        'views': views,
+                        'comments': comments,
+                        'scraped_at': datetime.now().strftime('%Y-%m-%d %H:%M')
+                    })
+
+                next_page = soup.find('a', rel='next')
+                return items, not bool(next_page)
+
+        except Exception as e:
+            pass  # im lặng, thử proxy tiếp
+
+        time.sleep(1.5)
+
+    logger.error(f"Không thể scrape {url} sau 15 proxy")
+    return [], True
 
 # ====================== RANDOM HEADERS (CHỐNG 403) ======================
 ua = UserAgent(browsers=['chrome', 'firefox', 'edge', 'safari'])
