@@ -183,3 +183,10 @@
 2025-12-14 02:08:41,446 - INFO - [Việt Nam] Trang 1 → 0 | +0
 2025-12-14 02:08:41,446 - INFO - [Việt Nam] HOÀN TẤT → 0 video
 2025-12-14 02:08:45,570 - ERROR - Lỗi Sheets: APIError: [503]: The service is currently unavailable.
+2025-12-15 02:00:53,722 - INFO - TẢI DANH SÁCH PROXY SỐNG MỚI...
+2025-12-15 02:00:54,217 - INFO - ĐÃ TẢI 43 PROXY SỐNG!
+2025-12-15 02:00:54,218 - INFO - === BẮT ĐẦU SCRAPE – SIÊU NHANH VỚI PROXY SỐNG SẴN ===
+2025-12-15 02:00:54,219 - INFO - [Việt Nam] Trang 1
+2025-12-15 02:06:06,517 - INFO - [Việt Nam] Trang 1 → 0 | +0
+2025-12-15 02:06:06,518 - INFO - [Việt Nam] HOÀN TẤT → 0 video
+2025-12-15 02:06:09,819 - INFO - HOÀN TẤT! ĐÃ UP LÊN SHEETS
