@@ -28,16 +28,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib
 
-      - name: Setup Chrome & ChromeDriver (matching version)
+      - name: Setup Chrome 144 & matching ChromeDriver
         uses: browser-actions/setup-chrome@v2
         with:
-          install-chromedriver: true
-          install-dependencies: true   # Cài thêm libs cần thiết cho Chrome headless
+          chrome-version: 144               # Force major version 144 → tự tải Chrome 144.x
+          install-chromedriver: true        # Tự động cài ChromeDriver khớp version
+          install-dependencies: true        # Cài libs cần cho headless
 
-      - name: Verify Chrome & ChromeDriver versions
+      - name: Verify versions (debug)
         run: |
-          google-chrome --version
+          echo "Chrome version:"
+          google-chrome --version || google-chrome-stable --version
+          echo "ChromeDriver version:"
           chromedriver --version
+          which chromedriver
 
       - name: Run scraper
         env:
