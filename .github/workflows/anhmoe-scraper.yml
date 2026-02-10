@@ -1,0 +1,48 @@
+# .github/workflows/anhmoe-scraper.yml
+name: Anhmoe Scraper
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: 'Number of pages to scrape (or "all")'
+        required: false
+        default: 'all'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install selenium gspread google-auth google-auth-oauthlib
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Install Chromedriver
+        uses: nanasess/setup-chromedriver@v2
+
+      - name: Run scraper
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          export PATH=$PATH:$(pwd)/chrome
+          chromedriver --version
+          python anhmoe/scraper.py
+        # For workflow_dispatch, pass input to script
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "${{ github.event.inputs.pages }}" | python anhmoe/scraper.py
