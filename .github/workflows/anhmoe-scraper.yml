@@ -1,48 +1,52 @@
-# .github/workflows/anhmoe-scraper.yml
-name: Anhmoe Scraper
+name: Anhmoe Video Scraper
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # Daily at midnight UTC
+    - cron: '0 3 * * *'          # 3h sáng UTC mỗi ngày (~10h sáng VN)
   workflow_dispatch:
     inputs:
       pages:
-        description: 'Number of pages to scrape (or "all")'
+        description: 'Số trang muốn scrape (hoặc "all" để lấy hết)'
         required: false
         default: 'all'
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib
 
-      - name: Install Chrome
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: stable
-
-      - name: Install Chromedriver
-        uses: nanasess/setup-chromedriver@v2
+      - name: Install Chrome & Chromedriver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          wget -N https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION%.*}
+          CHROMEDRIVER_VERSION=$(cat LATEST_RELEASE_${CHROME_VERSION%.*})
+          wget https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip
+          sudo mv chromedriver /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
+          rm chromedriver_linux64.zip LATEST_RELEASE_*
 
       - name: Run scraper
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
-          export PATH=$PATH:$(pwd)/chrome
-          chromedriver --version
-          python anhmoe/scraper.py
-        # For workflow_dispatch, pass input to script
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "${{ github.event.inputs.pages }}" | python anhmoe/scraper.py
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pages }}" ] && [ "${{ github.event.inputs.pages }}" != "all" ]; then
+            python anhmoe/scraper.py "${{ github.event.inputs.pages }}"
+          else
+            python anhmoe/scraper.py all
+          fi
