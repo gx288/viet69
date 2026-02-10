@@ -48,7 +48,7 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pages }}" ] && [ "${{ github.event.inputs.pages }}" != "all" ]; then
-            python anhmoe/scraper.py "${{ github.event.inputs.pages }}"
+            python -u anhmoe/scraper.py "${{ github.event.inputs.pages }}"
           else
             python anhmoe/scraper.py all
           fi
