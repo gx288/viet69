@@ -91,34 +91,55 @@ def scrape_pages(max_pages=None):
         for item in items:
             # Lấy data-object trước để extract video url & title
             data_object_str = item.get_attribute('data-object') or ''
-            video_url = ''
-            title = ''
-
-            if data_object_str:
-                try:
-                    # Fix escape trong JSON string
-                    data_obj = json.loads(data_object_str.replace('\\', ''))
-                    # Video URL: thường ở image.url hoặc url
-                    video_url = data_obj.get('image', {}).get('url') or data_obj.get('url') or ''
-                    # Title: display_title hoặc title hoặc name
-                    title = (data_obj.get('display_title') or 
-                             data_obj.get('title') or 
-                             data_obj.get('name') or 
-                             data_obj.get('display_name') or '')
-                    print(f"Data-object title: {title} | Video: {video_url}")
-                except json.JSONDecodeError:
-                    print("Lỗi parse data-object JSON")
-
-            # Fallback title từ link text nếu data-object không có
-            if not title:
-                try:
-                    title_elem = item.find_element(By.CSS_SELECTOR, 'a.list-item-desc-title-link')
-                    title = title_elem.get_attribute('title') or title_elem.text.strip()
-                except:
-                    title = 'Unknown Title'
-
-            if not video_url:
-                continue  # Bỏ item không có video link
+                        video_url = ''
+                        title = ''
+            
+                        if data_object_str:
+                            try:
+                                # 1. Decode URL-encoded nếu có (thường là %7B...%7D)
+                                from urllib.parse import unquote
+                                decoded_str = unquote(data_object_str)
+            
+                                # 2. Thay thế escape thừa nếu cần (thay \\ thành \ , hoặc fix common issues)
+                                decoded_str = decoded_str.replace('\\"', '"').replace('\\\\', '\\')
+            
+                                # 3. Parse JSON
+                                data_obj = json.loads(decoded_str)
+                                
+                                # Video URL: thử các key phổ biến
+                                video_url = (
+                                    data_obj.get('image', {}).get('url') or
+                                    data_obj.get('url') or
+                                    data_obj.get('path') or ''
+                                )
+                                
+                                # Title: ưu tiên display_title, title, name, filename
+                                title = (
+                                    data_obj.get('display_title') or
+                                    data_obj.get('title') or
+                                    data_obj.get('name') or
+                                    data_obj.get('display_name') or
+                                    data_obj.get('image', {}).get('name') or
+                                    data_obj.get('image', {}).get('filename', '').rsplit('.', 1)[0] or
+                                    'Unknown Title'
+                                )
+                                print(f"Parse OK - Title: {title} | Video URL: {video_url}")
+                            except Exception as e:
+                                print(f"Lỗi parse data-object: {e} | Raw str: {data_object_str[:100]}...")
+                        else:
+                            print("Không có data-object attribute")
+            
+                        # Fallback title nếu parse fail hoặc không có
+                        if not title:
+                            try:
+                                title_elem = item.find_element(By.CSS_SELECTOR, 'a.list-item-desc-title-link')
+                                title = title_elem.get_attribute('title') or title_elem.text.strip() or 'Unknown'
+                            except:
+                                title = 'Unknown Title'
+            
+                        if not video_url:
+                            print("Bỏ item - không tìm thấy video URL")
+                            continue
 
             if video_url in existing_video_urls:
                 consecutive_duplicates += 1
