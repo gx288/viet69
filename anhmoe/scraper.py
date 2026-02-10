@@ -221,8 +221,8 @@ def scrape_pages(max_pages=None):
                 print("Không tìm thấy link next")
                 break
             page_number += 1
-            print("Chờ 10 giây...")
-            time.sleep(10)
+            print("Chờ 1 giây...")
+            time.sleep(1)
         except NoSuchElementException:
             print("Hết trang")
             break
