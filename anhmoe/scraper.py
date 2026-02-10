@@ -5,6 +5,7 @@ import time
 import sys
 import subprocess
 from urllib.parse import unquote
+from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -12,7 +13,7 @@ from selenium.common.exceptions import NoSuchElementException
 from google.oauth2.service_account import Credentials
 import gspread
 
-# Load Google credentials từ biến môi trường
+# Load Google credentials
 creds_json = os.getenv('GOOGLE_CREDENTIALS')
 if not creds_json:
     raise ValueError("Biến môi trường GOOGLE_CREDENTIALS chưa được thiết lập")
@@ -39,7 +40,7 @@ def get_or_create_sheet():
         headers = sheet.row_values(1)
         expected = ['Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link']
         if headers != expected:
-            print("Header không khớp → cập nhật header mới (cẩn thận mất dữ liệu cũ nếu cột thay đổi).")
+            print("Header không khớp → cập nhật header mới.")
             sheet.update(range_name='A1:G1', values=[expected])
     return sheet
 
@@ -51,6 +52,41 @@ def load_existing_video_urls(sheet):
     existing_urls = {row[4] for row in values[1:] if len(row) > 4 and row[4].strip()}
     print(f"Cache {len(existing_urls)} video tồn tại.")
     return existing_urls
+
+def append_to_json_file(new_rows, file_path='anhmoe/videos_data.json'):
+    """Append dữ liệu mới vào file JSON (array of objects)"""
+    path = Path(file_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing_data = []
+    if path.exists():
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            print(f"File {file_path} lỗi hoặc rỗng → khởi tạo mới")
+            existing_data = []
+
+    # Chuyển new_rows thành list dict
+    new_json_rows = []
+    for row in new_rows:
+        new_json_rows.append({
+            "title": row[0],
+            "author": row[1],
+            "duration": row[2],
+            "thumb_url": row[3],
+            "video_url": row[4],
+            "page_number": row[5],
+            "page_link": row[6],
+            "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
+        })
+
+    all_data = existing_data + new_json_rows
+
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(all_data, f, ensure_ascii=False, indent=2)
+
+    print(f"Append {len(new_json_rows)} item mới vào {file_path} (tổng: {len(all_data)})")
 
 def scrape_pages(max_pages=None):
     sheet = get_or_create_sheet()
@@ -78,7 +114,7 @@ def scrape_pages(max_pages=None):
     while True:
         print(f"\n=== Trang {page_number} === {current_url}")
         driver.get(current_url)
-        time.sleep(6)  # Chờ load img + JSON
+        time.sleep(6)
 
         items = driver.find_elements(By.CSS_SELECTOR,
                                      'div.list-item.fixed-size.c8.gutter-margin-right-bottom.jsly.position-absolute.--show.ui-selectee')
@@ -112,7 +148,7 @@ def scrape_pages(max_pages=None):
                     )
                     print(f"Parse OK - Title: {title} | Video: {video_url}")
                 except Exception as e:
-                    print(f"Lỗi parse JSON: {e} | Raw (short): {data_object_str[:150]}...")
+                    print(f"Lỗi parse JSON: {e} | Raw: {data_object_str[:150]}...")
             else:
                 print("No data-object")
 
@@ -136,7 +172,6 @@ def scrape_pages(max_pages=None):
                 continue
             consecutive_duplicates = 0
 
-            # Thumb URL: ưu tiên fr.jpeg
             thumb_url = ''
             try:
                 imgs = item.find_elements(By.TAG_NAME, 'img')
@@ -170,7 +205,10 @@ def scrape_pages(max_pages=None):
 
         if new_rows:
             sheet.append_rows(new_rows)
-            print(f"Thêm {len(new_rows)} item")
+            print(f"Thêm {len(new_rows)} item vào sheet")
+
+            # Append vào file JSON trong repo
+            append_to_json_file(new_rows)
 
         if max_pages is not None and page_number >= max_pages:
             print(f"Đạt {max_pages} trang → dừng")
@@ -183,7 +221,7 @@ def scrape_pages(max_pages=None):
                 print("Không tìm thấy link next")
                 break
             page_number += 1
-            print("Chờ 10 giây trước trang mới...")
+            print("Chờ 10 giây...")
             time.sleep(10)
         except NoSuchElementException:
             print("Hết trang")
