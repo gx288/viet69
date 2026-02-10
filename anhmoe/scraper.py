@@ -2,6 +2,7 @@
 import os
 import json
 import time
+import sys
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -9,144 +10,158 @@ from selenium.common.exceptions import NoSuchElementException
 from google.oauth2.service_account import Credentials
 import gspread
 
-# Load Google credentials from environment variable
+# Load Google credentials từ biến môi trường
 creds_json = os.getenv('GOOGLE_CREDENTIALS')
 if not creds_json:
-    raise ValueError("GOOGLE_CREDENTIALS environment variable not set")
+    raise ValueError("Biến môi trường GOOGLE_CREDENTIALS chưa được thiết lập")
 creds_dict = json.loads(creds_json)
 
-# Setup Google Sheets client
+# Thiết lập Google Sheets
 scopes = ['https://www.googleapis.com/auth/spreadsheets']
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 client = gspread.authorize(creds)
 
-# Spreadsheet ID and sheet name
-spreadsheet_id = '1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU'
-sheet_name = 'anhmoe videos'
+SPREADSHEET_ID = '1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU'
+SHEET_NAME = 'anhmoe videos'
+BASE_URL = 'https://anh.moe/category/video-nsfw'
 
-# Base URL
-base_url = 'https://anh.moe/category/video-nsfw'
-
-# Function to get or create sheet
 def get_or_create_sheet():
-    spreadsheet = client.open_by_key(spreadsheet_id)
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
     try:
-        sheet = spreadsheet.worksheet(sheet_name)
+        sheet = spreadsheet.worksheet(SHEET_NAME)
     except gspread.exceptions.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=20)
-        # Set headers (adjust based on data attributes you want to save)
+        sheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=2000, cols=25)
         headers = [
-            'data-id', 'data-category-id', 'data-flag', 'data-type', 'data-media', 'data-size',
-            'data-liked', 'data-description', 'data-privacy', 'data-url-short', 'data-thumb',
-            'data-object', 'title', 'uploaded_by', 'duration', 'page_number', 'page_link'
+            'data-id', 'data-category-id', 'data-flag', 'data-type', 'data-media',
+            'data-size', 'data-liked', 'data-description', 'data-privacy',
+            'data-url-short', 'data-thumb', 'data-object', 'title', 'uploaded_by',
+            'duration', 'page_number', 'page_link'
         ]
         sheet.append_row(headers)
     return sheet
 
-# Function to check if item exists in sheet by data-id
 def item_exists(sheet, data_id):
-    data = sheet.get_all_values()
-    for row in data[1:]:  # Skip header
-        if row[0] == data_id:  # Assuming data-id is first column
+    if not data_id:
+        return False
+    values = sheet.get_all_values()
+    for row in values[1:]:  # Bỏ header
+        if row and row[0] == data_id:
             return True
     return False
 
-# Main scraping function
 def scrape_pages(max_pages=None):
     sheet = get_or_create_sheet()
 
-    # Setup Selenium
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+
     driver = webdriver.Chrome(options=options)
 
-    current_url = base_url
+    current_url = BASE_URL
     page_number = 1
+    consecutive_duplicates = 0
+
     while True:
+        print(f"Đang xử lý trang {page_number} → {current_url}")
         driver.get(current_url)
-        time.sleep(3)  # Wait for page load
+        time.sleep(4)  # Chờ load trang
 
-        # Find all items
         items = driver.find_elements(By.CSS_SELECTOR, 'div.list-item.fixed-size.c8.gutter-margin-right-bottom.jsly.position-absolute.--show.ui-selectee')
-        duplicate_count = 0
+
         new_rows = []
-
         for item in items:
-            # Extract data attributes
             data_id = item.get_attribute('data-id') or ''
-            data_category_id = item.get_attribute('data-category-id') or ''
-            data_flag = item.get_attribute('data-flag') or ''
-            data_type = item.get_attribute('data-type') or ''
-            data_media = item.get_attribute('data-media') or ''
-            data_size = item.get_attribute('data-size') or ''
-            data_liked = item.get_attribute('data-liked') or ''
-            data_description = item.get_attribute('data-description') or ''
-            data_privacy = item.get_attribute('data-privacy') or ''
-            data_url_short = item.get_attribute('data-url-short') or ''
-            data_thumb = item.get_attribute('data-thumb') or ''
-            data_object = item.get_attribute('data-object') or ''
+            if not data_id:
+                continue
 
-            # Extract inner elements
-            try:
-                title = item.find_element(By.CSS_SELECTOR, 'a.list-item-desc-title-link').get_attribute('title') or ''
-            except NoSuchElementException:
-                title = ''
-            try:
-                uploaded_by = item.find_element(By.CSS_SELECTOR, 'div.list-item-from').text or ''
-            except NoSuchElementException:
-                uploaded_by = ''
-            try:
-                duration = item.find_element(By.CSS_SELECTOR, 'div.list-item-duration').text or ''
-            except NoSuchElementException:
-                duration = ''
-
-            # Check duplicate
             if item_exists(sheet, data_id):
-                duplicate_count += 1
-                if duplicate_count > 5:
-                    print(f"More than 5 duplicates on page {page_number}, stopping.")
+                consecutive_duplicates += 1
+                if consecutive_duplicates > 5:
+                    print(f"Phát hiện >5 item trùng liên tiếp → dừng tại trang {page_number}")
                     driver.quit()
                     return
+                continue
             else:
-                # Prepare row (order matches headers)
-                row = [
-                    data_id, data_category_id, data_flag, data_type, data_media, data_size,
-                    data_liked, data_description, data_privacy, data_url_short, data_thumb,
-                    data_object, title, uploaded_by, duration, str(page_number), current_url
-                ]
-                new_rows.append(row)
+                consecutive_duplicates = 0
 
-        # Append new rows to sheet (at the end, but since we process pages sequentially, earlier pages first)
+            # Lấy các thuộc tính
+            row = [
+                data_id,
+                item.get_attribute('data-category-id') or '',
+                item.get_attribute('data-flag') or '',
+                item.get_attribute('data-type') or '',
+                item.get_attribute('data-media') or '',
+                item.get_attribute('data-size') or '',
+                item.get_attribute('data-liked') or '',
+                item.get_attribute('data-description') or '',
+                item.get_attribute('data-privacy') or '',
+                item.get_attribute('data-url-short') or '',
+                item.get_attribute('data-thumb') or '',
+                item.get_attribute('data-object') or '',
+            ]
+
+            # Lấy thông tin từ nội dung
+            try:
+                title_elem = item.find_element(By.CSS_SELECTOR, 'a.list-item-desc-title-link')
+                row.append(title_elem.get_attribute('title') or title_elem.text.strip())
+            except:
+                row.append('')
+
+            try:
+                row.append(item.find_element(By.CSS_SELECTOR, 'div.list-item-from').text.strip())
+            except:
+                row.append('')
+
+            try:
+                row.append(item.find_element(By.CSS_SELECTOR, 'div.list-item-duration').text.strip())
+            except:
+                row.append('')
+
+            # Thêm page info
+            row.append(str(page_number))
+            row.append(current_url)
+
+            new_rows.append(row)
+
         if new_rows:
             sheet.append_rows(new_rows)
+            print(f"Đã thêm {len(new_rows)} item mới vào sheet")
 
-        # Check if we reached max pages
-        if max_pages and page_number >= max_pages:
-            print(f"Reached max pages: {max_pages}")
-            driver.quit()
-            return
+        # Kiểm tra giới hạn page
+        if max_pages is not None and page_number >= max_pages:
+            print(f"Đạt giới hạn {max_pages} trang → kết thúc")
+            break
 
-        # Find next page button
+        # Tìm nút next page
         try:
-            next_button = driver.find_element(By.CSS_SELECTOR, 'li.pagination-next a[data-pagination="next"]')
-            current_url = next_button.get_attribute('href')
+            next_btn = driver.find_element(By.CSS_SELECTOR, 'li.pagination-next a[data-pagination="next"]')
+            current_url = next_btn.get_attribute('href')
+            if not current_url:
+                break
             page_number += 1
+            time.sleep(2)
         except NoSuchElementException:
-            print("No more pages.")
-            driver.quit()
-            return
+            print("Không còn trang tiếp theo")
+            break
 
-# For manual run: prompt for number of pages
+    driver.quit()
+
 if __name__ == '__main__':
-    input_str = input("Enter number of pages to scrape (or 'all' for all pages): ").strip().lower()
-    if input_str == 'all':
-        max_pages = None
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].strip().lower()
+        if arg in ('all', 'tất cả'):
+            max_pages = None
+        else:
+            try:
+                max_pages = int(arg)
+            except ValueError:
+                print(f"Giá trị không hợp lệ: {arg} → chạy mặc định tất cả trang")
+                max_pages = None
     else:
-        try:
-            max_pages = int(input_str)
-        except ValueError:
-            print("Invalid input, running for 1 page.")
-            max_pages = 1
+        max_pages = None
+
     scrape_pages(max_pages)
