@@ -11,7 +11,7 @@ from selenium.common.exceptions import NoSuchElementException
 from google.oauth2.service_account import Credentials
 import gspread
 
-# Load Google credentials từ env
+# Load Google credentials
 creds_json = os.getenv('GOOGLE_CREDENTIALS')
 if not creds_json:
     raise ValueError("Biến môi trường GOOGLE_CREDENTIALS chưa được thiết lập")
@@ -30,29 +30,35 @@ def get_or_create_sheet():
     try:
         sheet = spreadsheet.worksheet(SHEET_NAME)
     except gspread.exceptions.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=2000, cols=30)
+        sheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=2000, cols=10)
         headers = [
-            'data-id', 'data-category-id', 'data-flag', 'data-type', 'data-media',
-            'data-size', 'data-liked', 'data-description', 'data-privacy',
-            'data-url-short', 'data-thumb (small)', 'data-object', 'title',
-            'uploaded_by', 'duration', 'page_number', 'page_link', 'thumb_url (fr.jpeg)'
+            'Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link'
         ]
         sheet.append_row(headers)
+        print("Tạo sheet mới với header chuẩn.")
+    else:
+        # Kiểm tra header nếu sheet tồn tại
+        headers = sheet.row_values(1)
+        expected = ['Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link']
+        if headers != expected:
+            print("Header không khớp, cập nhật header mới (có thể mất dữ liệu cũ nếu cột thay đổi).")
+            sheet.update('A1:G1', [expected])
     return sheet
 
-def load_existing_ids(sheet):
-    """Load toàn bộ data-id một lần duy nhất để cache, tránh quota"""
-    print("Đang load cache data-id từ Google Sheet...")
+def load_existing_video_urls(sheet):
+    """Cache video URL để check duplicate (vì title có thể trùng)"""
+    print("Load cache video URLs từ sheet...")
     values = sheet.get_all_values()
     if not values:
         return set()
-    existing_ids = {row[0] for row in values[1:] if row and row[0].strip()}
-    print(f"Đã cache {len(existing_ids)} item tồn tại.")
-    return existing_ids
+    # Cột Video URL là cột E (index 4, bắt đầu từ 0)
+    existing_urls = {row[4] for row in values[1:] if len(row) > 4 and row[4].strip()}
+    print(f"Đã cache {len(existing_urls)} video tồn tại.")
+    return existing_urls
 
 def scrape_pages(max_pages=None):
     sheet = get_or_create_sheet()
-    existing_ids = load_existing_ids(sheet)
+    existing_video_urls = load_existing_video_urls(sheet)
 
     options = Options()
     options.add_argument('--headless')
@@ -61,11 +67,11 @@ def scrape_pages(max_pages=None):
     options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1920,1080')
 
-    print("Khởi tạo Selenium WebDriver...")
+    print("Khởi tạo Selenium...")
     try:
-        print("ChromeDriver version: " + subprocess.check_output(['chromedriver', '--version']).decode().strip())
+        print("ChromeDriver: " + subprocess.check_output(['chromedriver', '--version']).decode().strip())
     except:
-        print("ChromeDriver version: (từ PATH của GitHub Actions)")
+        print("ChromeDriver: từ PATH")
 
     driver = webdriver.Chrome(options=options)
 
@@ -76,122 +82,125 @@ def scrape_pages(max_pages=None):
     while True:
         print(f"\n=== Trang {page_number} === {current_url}")
         driver.get(current_url)
-        time.sleep(4)  # Chờ load đầy đủ
+        time.sleep(5)  # Tăng chờ để img load
 
         items = driver.find_elements(By.CSS_SELECTOR,
                                      'div.list-item.fixed-size.c8.gutter-margin-right-bottom.jsly.position-absolute.--show.ui-selectee')
 
         new_rows = []
         for item in items:
-            data_id = item.get_attribute('data-id') or ''
-            if not data_id:
-                continue
+            # Lấy data-object trước để extract video url & title
+            data_object_str = item.get_attribute('data-object') or ''
+            video_url = ''
+            title = ''
 
-            if data_id in existing_ids:
+            if data_object_str:
+                try:
+                    # Fix escape trong JSON string
+                    data_obj = json.loads(data_object_str.replace('\\', ''))
+                    # Video URL: thường ở image.url hoặc url
+                    video_url = data_obj.get('image', {}).get('url') or data_obj.get('url') or ''
+                    # Title: display_title hoặc title hoặc name
+                    title = (data_obj.get('display_title') or 
+                             data_obj.get('title') or 
+                             data_obj.get('name') or 
+                             data_obj.get('display_name') or '')
+                    print(f"Data-object title: {title} | Video: {video_url}")
+                except json.JSONDecodeError:
+                    print("Lỗi parse data-object JSON")
+
+            # Fallback title từ link text nếu data-object không có
+            if not title:
+                try:
+                    title_elem = item.find_element(By.CSS_SELECTOR, 'a.list-item-desc-title-link')
+                    title = title_elem.get_attribute('title') or title_elem.text.strip()
+                except:
+                    title = 'Unknown Title'
+
+            if not video_url:
+                continue  # Bỏ item không có video link
+
+            if video_url in existing_video_urls:
                 consecutive_duplicates += 1
                 if consecutive_duplicates > 5:
-                    print(f"> 5 item trùng liên tiếp → dừng scrape tại trang {page_number}")
+                    print(f">5 video trùng → dừng tại trang {page_number}")
                     driver.quit()
                     return
                 continue
             else:
                 consecutive_duplicates = 0
 
-            # Lấy thumb_url ưu tiên từ thẻ <img src> (.fr.jpeg - chất lượng tốt)
+            # Thumb URL: ưu tiên fr.jpeg từ img
             thumb_url = ''
             try:
-                img_elem = item.find_element(By.CSS_SELECTOR, 'img[loading="lazy"]')
-                thumb_url = img_elem.get_attribute('src') or ''
-                if thumb_url and 'fr.jpeg' in thumb_url:
-                    print(f"Thumb đẹp (.fr): {thumb_url}")
-            except NoSuchElementException:
-                pass
-
-            # Fallback về data-thumb (.th.jpeg - nhỏ hơn)
-            if not thumb_url:
+                img_elements = item.find_elements(By.TAG_NAME, 'img')
+                for img in img_elements:
+                    src = img.get_attribute('src') or ''
+                    if src and 'fr.jpeg' in src:
+                        thumb_url = src
+                        print(f"Thumb cao cấp: {thumb_url}")
+                        break
+                if not thumb_url and img_elements:
+                    thumb_url = img_elements[0].get_attribute('src') or ''
+            except:
                 thumb_url = item.get_attribute('data-thumb') or ''
-                if thumb_url:
-                    print(f"Fallback thumb nhỏ (.th): {thumb_url}")
 
-            row = [
-                data_id,
-                item.get_attribute('data-category-id') or '',
-                item.get_attribute('data-flag') or '',
-                item.get_attribute('data-type') or '',
-                item.get_attribute('data-media') or '',
-                item.get_attribute('data-size') or '',
-                item.get_attribute('data-liked') or '',
-                item.get_attribute('data-description') or '',
-                item.get_attribute('data-privacy') or '',
-                item.get_attribute('data-url-short') or '',
-                item.get_attribute('data-thumb') or '',  # cột cũ: thumb nhỏ
-                item.get_attribute('data-object') or '',
-            ]
-
-            # Title
+            # Author
+            author = ''
             try:
-                title_elem = item.find_element(By.CSS_SELECTOR, 'a.list-item-desc-title-link')
-                row.append(title_elem.get_attribute('title') or title_elem.text.strip())
+                author = item.find_element(By.CSS_SELECTOR, 'div.list-item-from').text.strip()
             except:
-                row.append('')
-
-            # Uploaded by
-            try:
-                row.append(item.find_element(By.CSS_SELECTOR, 'div.list-item-from').text.strip())
-            except:
-                row.append('')
+                author = 'Unknown'
 
             # Duration
+            duration = ''
             try:
-                row.append(item.find_element(By.CSS_SELECTOR, 'div.list-item-duration').text.strip())
+                duration = item.find_element(By.CSS_SELECTOR, 'div.list-item-duration').text.strip()
             except:
-                row.append('')
+                duration = 'Unknown'
 
-            row.append(str(page_number))
-            row.append(current_url)
-
-            # Thêm cột thumb_url đẹp (.fr.jpeg)
-            row.append(thumb_url)
+            row = [
+                title,
+                author,
+                duration,
+                thumb_url,
+                video_url,
+                str(page_number),
+                current_url
+            ]
 
             new_rows.append(row)
-            existing_ids.add(data_id)  # Cập nhật cache
+            existing_video_urls.add(video_url)  # Cache
+
+            print(f"Item added: {title} | Video: {video_url} | Thumb: {thumb_url}")
 
         if new_rows:
             sheet.append_rows(new_rows)
-            print(f"→ Đã append {len(new_rows)} item mới vào sheet")
+            print(f"→ Thêm {len(new_rows)} item mới")
 
         if max_pages is not None and page_number >= max_pages:
-            print(f"Đạt giới hạn {max_pages} trang → kết thúc")
+            print(f"Đạt {max_pages} trang → dừng")
             break
 
         try:
             next_btn = driver.find_element(By.CSS_SELECTOR, 'li.pagination-next a[data-pagination="next"]')
             current_url = next_btn.get_attribute('href')
             if not current_url:
-                print("Không tìm thấy link next page")
                 break
             page_number += 1
-            print("Chờ 8 giây trước khi sang trang tiếp theo...")
-            time.sleep(8)
+            print("Chờ 10s trước trang mới...")
+            time.sleep(10)
         except NoSuchElementException:
-            print("Không còn trang tiếp theo")
+            print("Hết trang")
             break
 
     driver.quit()
-    print("Scrape hoàn tất.")
+    print("Hoàn tất scrape.")
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         arg = sys.argv[1].strip().lower()
-        if arg in ('all', 'tất cả'):
-            max_pages = None
-        else:
-            try:
-                max_pages = int(arg)
-            except ValueError:
-                print(f"Tham số '{arg}' không hợp lệ → chạy tất cả trang")
-                max_pages = None
+        max_pages = None if arg in ('all', 'tất cả') else int(arg) if arg.isdigit() else None
     else:
         max_pages = None
-
     scrape_pages(max_pages)
