@@ -65,23 +65,39 @@ jobs:
           git diff --stat || echo "No diff"
           [ -f anhmoe/videos_data.json ] && wc -l anhmoe/videos_data.json || echo "JSON file not found"
 
-      - name: Commit and push if changed (force rebase strategy)
+      - name: Commit and push videos_data.json (if changed)
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          
-          # Pull + rebase để tránh conflict
+
+          # Debug trước
+          git status --short
+          git diff --stat || echo "No diff before stash"
+
+          # Stash thay đổi từ scraper (nếu có)
+          git stash push -m "Scraper updates - temp stash" || true
+
+          # Pull + rebase an toàn
           git fetch origin
-          git rebase origin/${{ github.ref_name }} || { echo "Rebase thất bại → thử reset hard"; git reset --hard origin/${{ github.ref_name }}; }
-          
+          if ! git rebase origin/${{ github.ref_name }}; then
+            echo "Rebase thất bại → abort rebase và thử merge thay thế"
+            git rebase --abort || true
+            git merge origin/${{ github.ref_name }} --no-edit || { echo "Merge cũng fail → reset hard (cẩn thận)"; git reset --hard origin/${{ github.ref_name }}; }
+          fi
+
+          # Apply stash lại (nếu có)
+          git stash pop || echo "No stash to pop"
+
+          # Add file
           git add anhmoe/videos_data.json || true
-          
+
+          # Check lại diff staged
           if git diff --staged --quiet; then
-            echo "Không có thay đổi trong videos_data.json → bỏ qua commit"
+            echo "Không có thay đổi sau tất cả → bỏ qua commit"
           else
-            git commit -m "Update videos_data.json - scraped $(date +'%Y-%m-%d %H:%M:%S UTC') [run ${{ github.run_id }}]"
-            git push --force-with-lease origin HEAD:${{ github.ref_name }}
-            echo "Đã push thành công (dùng force-with-lease để an toàn)"
+            git commit -m "Update videos_data.json - scraped $(date +'%Y-%m-%d %H:%M:%S UTC') [run ${{ github.run_id }}] - added ~122 new videos"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "Đã push thành công"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
