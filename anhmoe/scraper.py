@@ -27,7 +27,7 @@ client = gspread.authorize(creds)
 
 SPREADSHEET_ID = '1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU'
 SHEET_NAME = 'anhmoe videos'
-BASE_URL = 'https://anh.moe/category/video-nsfw'
+BASE_URL = 'https://zpic.io/category/video-nsfw'
 JSON_PATH = 'anhmoe/videos_data.json'
 
 HEADERS = ['Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link']
