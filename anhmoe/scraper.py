@@ -13,10 +13,13 @@ from selenium.common.exceptions import NoSuchElementException
 from google.oauth2.service_account import Credentials
 import gspread
 
-# Load Google credentials
+# ────────────────────────────────────────────────
+# CONFIG
+# ────────────────────────────────────────────────
 creds_json = os.getenv('GOOGLE_CREDENTIALS')
 if not creds_json:
     raise ValueError("Biến môi trường GOOGLE_CREDENTIALS chưa được thiết lập")
+
 creds_dict = json.loads(creds_json)
 scopes = ['https://www.googleapis.com/auth/spreadsheets']
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
@@ -25,68 +28,116 @@ client = gspread.authorize(creds)
 SPREADSHEET_ID = '1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU'
 SHEET_NAME = 'anhmoe videos'
 BASE_URL = 'https://anh.moe/category/video-nsfw'
+JSON_PATH = 'anhmoe/videos_data.json'
 
+HEADERS = ['Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link']
+
+# ────────────────────────────────────────────────
 def get_or_create_sheet():
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
     try:
         sheet = spreadsheet.worksheet(SHEET_NAME)
     except gspread.exceptions.WorksheetNotFound:
         sheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=2000, cols=10)
-        headers = ['Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link']
-        sheet.append_row(headers)
+        sheet.append_row(HEADERS)
         print("Tạo sheet mới với header.")
     else:
-        headers = sheet.row_values(1)
-        expected = ['Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link']
-        if headers != expected:
-            print("Header không khớp → cập nhật header mới.")
-            sheet.update(range_name='A1:G1', values=[expected])
+        current_headers = sheet.row_values(1)
+        if current_headers != HEADERS:
+            print("Header không khớp → cập nhật.")
+            sheet.update('A1:G1', [HEADERS])
     return sheet
 
-def load_existing_video_urls(sheet):
-    print("Load cache video URLs...")
+def load_sheet_video_urls(sheet):
+    print("Đọc toàn bộ Google Sheet để lấy cache URLs...")
     values = sheet.get_all_values()
-    if not values:
-        return set()
+    if not values or len(values) < 2:
+        return set(), []
     existing_urls = {row[4] for row in values[1:] if len(row) > 4 and row[4].strip()}
-    print(f"Cache {len(existing_urls)} video tồn tại.")
-    return existing_urls
+    existing_rows = values[1:]  # giữ nguyên thứ tự trong sheet
+    print(f"Sheet cache: {len(existing_urls)} video URLs.")
+    return existing_urls, existing_rows
 
-def append_to_json_file(new_rows, file_path='anhmoe/videos_data.json'):
-    """Chèn dữ liệu mới vào đầu file JSON (array of objects)"""
-    path = Path(file_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    existing_data = []
-    if path.exists():
+def load_json_video_data():
+    path = Path(JSON_PATH)
+    if not path.exists():
+        print(f"File JSON {JSON_PATH} chưa tồn tại → khởi tạo rỗng")
+        return set(), []
+    with open(path, 'r', encoding='utf-8') as f:
         try:
-            with open(path, 'r', encoding='utf-8') as f:
-                existing_data = json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            print(f"File {file_path} lỗi hoặc rỗng → khởi tạo mới")
-            existing_data = []
-    
-    new_json_rows = []
-    for row in new_rows:
-        new_json_rows.append({
-            "title": row[0],
-            "author": row[1],
-            "duration": row[2],
-            "thumb_url": row[3],
-            "video_url": row[4],
-            "page_number": row[5],
-            "page_link": row[6],
-            "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
-        })
-    
-    # Mới nhất ở đầu → chèn new lên trước existing
-    all_data = new_json_rows + existing_data
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print(f"JSON lỗi → coi như rỗng")
+            data = []
+    urls = {item.get('video_url', '') for item in data if item.get('video_url')}
+    print(f"JSON cache: {len(urls)} video.")
+    return urls, data
+
+def write_json(all_data):
+    path = Path(JSON_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(all_data, f, ensure_ascii=False, indent=2)
-    print(f"Chèn {len(new_json_rows)} item mới lên ĐẦU {file_path} (tổng: {len(all_data)})")
+    print(f"Đã ghi JSON: {len(all_data)} items")
 
+def append_or_update_json(new_rows):
+    existing_urls, existing_data = load_json_video_data()
+    
+    added_count = 0
+    new_json_rows = []
+    for row in new_rows:
+        vid_url = row[4]
+        if vid_url and vid_url not in existing_urls:
+            new_json_rows.append({
+                "title": row[0],
+                "author": row[1],
+                "duration": row[2],
+                "thumb_url": row[3],
+                "video_url": vid_url,
+                "page_number": row[5],
+                "page_link": row[6],
+                "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
+            })
+            added_count += 1
+    
+    if new_json_rows:
+        # Mới nhất lên đầu
+        all_data = new_json_rows + existing_data
+        write_json(all_data)
+        print(f"Thêm {added_count} video mới vào JSON")
+    else:
+        print("Không có video mới để thêm vào JSON")
+
+def sync_sheet_to_json_if_needed(sheet):
+    sheet_urls, sheet_rows = load_sheet_video_urls(sheet)
+    json_urls, json_data = load_json_video_data()
+    
+    missing_in_json = []
+    for row in sheet_rows:
+        if len(row) < 5:
+            continue
+        vid_url = row[4]
+        if vid_url and vid_url not in json_urls:
+            missing_in_json.append({
+                "title": row[0],
+                "author": row[1],
+                "duration": row[2],
+                "thumb_url": row[3],
+                "video_url": vid_url,
+                "page_number": row[5],
+                "page_link": row[6],
+                "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
+            })
+    
+    if missing_in_json:
+        print(f"Đồng bộ {len(missing_in_json)} video từ Sheet → JSON (thiếu trong JSON)")
+        all_data = missing_in_json + json_data
+        write_json(all_data)
+
+# ────────────────────────────────────────────────
 def scrape_pages(max_pages=None):
     sheet = get_or_create_sheet()
-    existing_video_urls = load_existing_video_urls(sheet)
+    existing_video_urls, _ = load_sheet_video_urls(sheet)  # ưu tiên Sheet làm cache chính
     
     options = Options()
     options.add_argument('--headless')
@@ -97,7 +148,7 @@ def scrape_pages(max_pages=None):
     
     print("Khởi tạo Selenium...")
     try:
-        print("ChromeDriver: " + subprocess.check_output(['chromedriver', '--version']).decode().strip())
+        print("ChromeDriver version: " + subprocess.check_output(['chromedriver', '--version']).decode().strip())
     except:
         print("ChromeDriver: từ PATH")
     
@@ -105,15 +156,19 @@ def scrape_pages(max_pages=None):
     current_url = BASE_URL
     page_number = 1
     consecutive_duplicates = 0
-    all_new_rows_this_run = []          # ← Thu thập tất cả item mới trong lần chạy này
+    all_new_rows_this_run = []
 
     while True:
         print(f"\n=== Trang {page_number} === {current_url}")
         driver.get(current_url)
         time.sleep(6)
 
-        items = driver.find_elements(By.CSS_SELECTOR,
-            'div.list-item.fixed-size.c8.gutter-margin-right-bottom.jsly.position-absolute.--show.ui-selectee')
+        try:
+            items = driver.find_elements(By.CSS_SELECTOR,
+                'div.list-item.fixed-size.c8.gutter-margin-right-bottom.jsly.position-absolute.--show.ui-selectee')
+        except Exception as e:
+            print(f"Lỗi lấy items: {e}")
+            items = []
 
         page_new_rows = []
 
@@ -142,7 +197,7 @@ def scrape_pages(max_pages=None):
                         'Unknown'
                     )
                 except Exception as e:
-                    print(f"Lỗi parse JSON: {e} | Raw: {data_object_str[:150]}...")
+                    print(f"Lỗi parse data-object: {e}")
 
             if not title:
                 try:
@@ -157,9 +212,8 @@ def scrape_pages(max_pages=None):
             if video_url in existing_video_urls:
                 consecutive_duplicates += 1
                 if consecutive_duplicates > 5:
-                    print(f">5 trùng liên tiếp → dừng sớm")
-                    driver.quit()
-                    return
+                    print(f">5 trùng liên tiếp → dừng scrape sớm")
+                    break  # break for, vẫn xử lý dữ liệu đã có
                 continue
 
             consecutive_duplicates = 0
@@ -175,7 +229,7 @@ def scrape_pages(max_pages=None):
                 if not thumb_url and imgs:
                     thumb_url = imgs[0].get_attribute('src') or ''
             except:
-                thumb_url = ''
+                thumb_url = item.get_attribute('data-thumb') or ''
 
             author = ''
             try:
@@ -195,12 +249,14 @@ def scrape_pages(max_pages=None):
             print(f"Added: {title[:50]}... | Video: {video_url[:60]}...")
 
         if page_new_rows:
-            # KHÔNG reverse nữa → giữ nguyên thứ tự trang (trên → dưới = mới → cũ hơn)
             all_new_rows_this_run.extend(page_new_rows)
             print(f"Thu thập {len(page_new_rows)} item mới từ trang {page_number}")
 
+        if consecutive_duplicates > 5:
+            break
+
         if max_pages is not None and page_number >= max_pages:
-            print(f"Đạt {max_pages} trang → dừng")
+            print(f"Đạt giới hạn {max_pages} trang → dừng")
             break
 
         try:
@@ -210,29 +266,33 @@ def scrape_pages(max_pages=None):
                 print("Không tìm thấy link next")
                 break
             page_number += 1
-            time.sleep(1.2)     # nhẹ nhàng hơn một chút
+            time.sleep(1.2)
         except NoSuchElementException:
             print("Hết trang")
             break
 
     driver.quit()
 
-    # Sau khi quét hết các trang → mới xử lý ghi dữ liệu một lần
+    # ─── XỬ LÝ GHI SAU KHI SCRAPE XONG ───
     if all_new_rows_this_run:
-        print(f"\nTổng mới trong lần chạy này: {len(all_new_rows_this_run)} video")
-        
-        # Ghi vào Google Sheet - chèn lên đầu (sau header)
-        sheet.insert_rows(all_new_rows_this_run, row=2)
-        print(f"Đã chèn {len(all_new_rows_this_run)} dòng mới vào đầu sheet")
+        print(f"\nTổng mới trong lần chạy: {len(all_new_rows_this_run)} video")
 
-        # Ghi vào JSON - mới nhất ở đầu
-        append_to_json_file(all_new_rows_this_run)
+        # 1. Ghi vào Sheet - chèn lên đầu (sau header)
+        sheet.insert_rows(all_new_rows_this_run, row=2)
+        print(f"Chèn {len(all_new_rows_this_run)} dòng mới vào đầu Sheet")
+
+        # 2. Ghi vào JSON
+        append_or_update_json(all_new_rows_this_run)
+
+        # 3. Đồng bộ ngược Sheet → JSON nếu cần
+        sync_sheet_to_json_if_needed(sheet)
     else:
         print("Không có dữ liệu mới nào trong lần chạy này.")
 
     print("Hoàn tất scrape.")
 
 if __name__ == '__main__':
+    max_pages = None
     if len(sys.argv) > 1:
         arg = sys.argv[1].strip().lower()
         if arg in ('all', 'tất cả'):
@@ -241,9 +301,6 @@ if __name__ == '__main__':
             try:
                 max_pages = int(arg)
             except ValueError:
-                print(f"Tham số '{arg}' không hợp lệ → chạy tất cả")
+                print(f"Tham số không hợp lệ '{arg}' → chạy all")
                 max_pages = None
-    else:
-        max_pages = None
-
     scrape_pages(max_pages)
