@@ -13,10 +13,11 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # cần full history để rebase tốt hơn
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -26,46 +27,53 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install selenium gspread google-auth google-auth-oauthlib
+          pip install selenium gspread google-auth google-auth-oauthlib oauth2client
 
-      - name: Setup Chrome 144 & matching ChromeDriver
+      - name: Setup Chrome & ChromeDriver
         uses: browser-actions/setup-chrome@v2
         with:
-          chrome-version: 144
+          chrome-version: stable
           install-chromedriver: true
-          install-dependencies: true
 
       - name: Verify versions
         run: |
-          google-chrome --version || google-chrome-stable --version
-          chromedriver --version
+          google-chrome --version || true
+          chromedriver --version || true
 
       - name: Run scraper
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pages }}" ] && [ "${{ github.event.inputs.pages }}" != "all" ]; then
-            python -u anhmoe/scraper.py "${{ github.event.inputs.pages }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.pages }}" ] && [ "${{ inputs.pages }}" != "all" ]; then
+            python -u anhmoe/scraper.py "${{ inputs.pages }}"
           else
             python -u anhmoe/scraper.py all
           fi
 
-      - name: Commit and push videos_data.json (if changed)
+      - name: Debug file status before commit
         run: |
-          # Pull trước để merge/rebase nếu branch có thay đổi từ action khác
-          git pull --rebase origin ${{ github.ref_name }} || echo "Pull rebase thất bại, tiếp tục..."
+          ls -la anhmoe/
+          git status --short
+          git diff --stat || echo "No diff"
+          [ -f anhmoe/videos_data.json ] && wc -l anhmoe/videos_data.json || echo "JSON file not found"
 
+      - name: Commit and push if changed (force rebase strategy)
+        run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-
+          
+          # Pull + rebase để tránh conflict
+          git fetch origin
+          git rebase origin/${{ github.ref_name }} || { echo "Rebase thất bại → thử reset hard"; git reset --hard origin/${{ github.ref_name }}; }
+          
           git add anhmoe/videos_data.json || true
-
+          
           if git diff --staged --quiet; then
-            echo "Không có thay đổi mới trong videos_data.json → bỏ qua commit"
+            echo "Không có thay đổi trong videos_data.json → bỏ qua commit"
           else
             git commit -m "Update videos_data.json - scraped $(date +'%Y-%m-%d %H:%M:%S UTC') [run ${{ github.run_id }}]"
-            git push origin HEAD:${{ github.ref_name }}
-            echo "Đã push file JSON thành công"
+            git push --force-with-lease origin HEAD:${{ github.ref_name }}
+            echo "Đã push thành công (dùng force-with-lease để an toàn)"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
