@@ -29,11 +29,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib oauth2client
 
-      - name: Setup Chrome & ChromeDriver
+      - name: Setup Chrome & matching ChromeDriver
         uses: browser-actions/setup-chrome@v2
         with:
-          chrome-version: stable
-          install-chromedriver: true
+          chrome-version: 145          # chỉ định rõ version 145 để cố định (hoặc 'stable' nếu muốn auto, nhưng dễ mismatch)
+          install-chromedriver: true   # tự động cài driver khớp với chrome-version
+          install-dependencies: true
+
+      - name: Verify versions (debug)
+        run: |
+          google-chrome --version || google-chrome-stable --version
+          chromedriver --version
+          which chromedriver
+          echo "PATH chromedriver: $(which chromedriver)"
 
       - name: Verify versions
         run: |
