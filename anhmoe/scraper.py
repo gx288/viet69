@@ -179,12 +179,17 @@ def scrape_pages(max_pages=None):
             new_rows.append(row)
             existing_video_urls.add(video_url)
             print(f"Added: {title[:50]}... | Video: {video_url[:60]}...")
-        if new_rows:
-            # Chèn vào ngay sau header (dòng 2)
-            sheet.insert_rows(new_rows, row=2)
-            print(f"Chèn {len(new_rows)} item mới vào ĐẦU sheet (sau header)")
-            # Append vào file JSON trong repo (với mới ở đầu)
-            append_to_json_file(new_rows)
+            if new_rows:
+                        # === SỬA Ở ĐÂY ===
+                        # Đảo ngược để item đầu trang (thường mới nhất) lên đầu
+                        new_rows.reverse()
+                        
+                        # Chèn vào ngay sau header (dòng 2)
+                        sheet.insert_rows(new_rows, row=2)
+                        print(f"Chèn {len(new_rows)} item mới vào ĐẦU sheet (sau header) - thứ tự đã đảo")
+            
+                        # Append vào file JSON (với mới ở đầu, thứ tự đã đảo)
+                        append_to_json_file(new_rows)
         if max_pages is not None and page_number >= max_pages:
             print(f"Đạt {max_pages} trang → dừng")
             break
