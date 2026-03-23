@@ -162,7 +162,7 @@ def scrape_pages(max_pages=None):
 
     driver = webdriver.Chrome(options=options)
 
-    # ─── LOAD COOKIE & FALLBACK LOGIN ───
+# ─── LOAD COOKIE & FALLBACK LOGIN ───
     cookies_loaded = False
     driver.get("https://zpic.io/")
     time.sleep(4)
@@ -172,21 +172,12 @@ def scrape_pages(max_pages=None):
         encoded = os.getenv('ZPIC_COOKIES_BASE64')
         if encoded:
             try:
-                # Clean kỹ lưỡng
                 encoded = encoded.strip().replace('\n', '').replace('\r', '').replace(' ', '').replace('\t', '')
                 print(f"Độ dài base64 sau clean: {len(encoded)} ký tự")
-                print(f"Base64 đầu: {encoded[:50]}...")
+                print(f"Base64 đầu 50 ký tự: {encoded[:50]}...")
 
-                # Thử decode chuẩn trước
-                try:
-                    decoded_bytes = base64.b64decode(encoded)
-                except base64.binascii.Error:
-                    # Nếu padding lỗi, thử add padding tự động (thường thiếu =)
-                    padding_needed = (4 - len(encoded) % 4) % 4
-                    encoded += '=' * padding_needed
-                    print(f"Thêm padding tự động: {padding_needed} ký tự '='")
-                    decoded_bytes = base64.b64decode(encoded)
-
+                # Thử decode chuẩn
+                decoded_bytes = base64.b64decode(encoded + '=' * ((4 - len(encoded) % 4) % 4))
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as tmp:
                     tmp.write(decoded_bytes)
                     tmp_path = tmp.name
@@ -199,50 +190,44 @@ def scrape_pages(max_pages=None):
                         cookie['expiry'] = -1
                     try:
                         driver.add_cookie(cookie)
-                    except Exception as add_err:
-                        print(f"Lỗi add cookie riêng: {add_err}")
+                    except:
+                        pass
                 cookies_loaded = True
                 print(f"ĐÃ LOAD THÀNH CÔNG {len(cookies)} cookies từ secret")
                 os.unlink(tmp_path)
             except Exception as e:
                 print(f"Lỗi decode/load secret: {e}")
-                print("→ Encode lại base64 từ file .pkl local và update secret")
 
-        # FALLBACK: Nếu cookie fail → thử login bằng acc từ secret
+        # FALLBACK LOGIN NẾU COOKIE FAIL
         if not cookies_loaded:
             username = os.getenv('ZPIC_USERNAME')
             password = os.getenv('ZPIC_PASSWORD')
+            print(f"Debug: ZPIC_USERNAME = '{username}' (len={len(username or '')})")
+            print(f"Debug: ZPIC_PASSWORD len = {len(password or '')}")
             if username and password:
-                print("Cookie fail → thử login tự động bằng acc từ secret...")
+                print("Cookie fail → thử login tự động...")
                 driver.get("https://zpic.io/login")
                 time.sleep(6)
 
                 try:
-                    # Điền username / email
                     user_field = driver.find_element(By.NAME, "login-subject")
-                    user_field.clear()
                     user_field.send_keys(username)
 
-                    # Điền password
                     pass_field = driver.find_element(By.NAME, "password")
-                    pass_field.clear()
                     pass_field.send_keys(password)
 
-                    # Submit
-                    submit_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit'].cursor-pointer")
-                    submit_btn.click()
-                    time.sleep(10)  # chờ redirect sau login
+                    driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
+                    time.sleep(10)
 
-                    current_url = driver.current_url.lower()
-                    if "login" not in current_url and "signup" not in current_url:
-                        print("LOGIN TỰ ĐỘNG THÀNH CÔNG!")
+                    if "login" not in driver.current_url.lower():
+                        print("LOGIN TỰ ĐỘNG THÀNH CÔNG")
                         cookies_loaded = True
                     else:
-                        print(f"Login tự động thất bại - URL hiện tại: {current_url}")
-                except Exception as login_err:
-                    print(f"Lỗi khi login tự động: {login_err}")
+                        print("Login fail - vẫn ở trang login")
+                except Exception as e:
+                    print(f"Lỗi login tự động: {e}")
             else:
-                print("Không có ZPIC_USERNAME/PASSWORD trong secret → bỏ qua login")
+                print("Không tìm thấy username/password trong secret")
 
     else:
         # Local mode
