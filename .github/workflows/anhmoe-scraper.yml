@@ -2,7 +2,7 @@ name: Anhmoe Video Scraper
 
 on:
   schedule:
-    - cron: '0 */3 * * *'  # Chạy tự động mỗi 3 tiếng
+    - cron: '0 */3 * * *'
   workflow_dispatch:
     inputs:
       pages:
@@ -13,7 +13,6 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    # Thêm quyền ghi để Bot có thể push file JSON lên lại repo
     permissions:
       contents: write
 
@@ -31,7 +30,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install selenium gspread google-auth google-auth-oauthlib oauth2client webdriver-manager
+          pip install selenium gspread google-auth google-auth-oauthlib oauth2client
+
       - name: Setup Chrome & matching ChromeDriver
         uses: browser-actions/setup-chrome@v1
         id: setup-chrome
@@ -41,35 +41,26 @@ jobs:
 
       - name: Run scraper
         env:
-          # Truyền tất cả Secret vào biến môi trường
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           ZPIC_COOKIES_BASE64: ${{ secrets.ZPIC_COOKIES_BASE64 }}
           ZPIC_USERNAME: ${{ secrets.ZPIC_USERNAME }}
           ZPIC_PASSWORD: ${{ secrets.ZPIC_PASSWORD }}
+          # Ép Python dùng đúng bản Chrome 146 vừa cài
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROMEDRIVER_BIN: ${{ steps.setup-chrome.outputs.chromedriver-path }}
         run: |
-          # Xử lý tham số đầu vào từ workflow_dispatch hoặc mặc định là 'all'
-          INPUT_PAGES="${{ github.event.inputs.pages }}"
-          if [ -z "$INPUT_PAGES" ]; then
-            INPUT_PAGES="all"
-          fi
-          
-          # Chạy script với đường dẫn chính xác
-          python -u anhmoe/scraper.py "$INPUT_PAGES"
+          PAGES_INPUT="${{ github.event.inputs.pages }}"
+          python -u anhmoe/scraper.py "${PAGES_INPUT:-all}"
 
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Cập nhật code mới nhất trước khi push để tránh xung đột
           git pull origin ${{ github.ref_name }} --rebase
-          
           git add anhmoe/videos_data.json || true
-          
-          # Kiểm tra xem có thay đổi gì không trước khi commit
           if git diff --staged --quiet; then
-            echo "Không có dữ liệu mới để cập nhật."
+            echo "No changes"
           else
-            git commit -m "Auto-update video data: $(date +'%Y-%m-%d %H:%M')"
+            git commit -m "Auto-update: $(date +'%Y-%m-%d %H:%M')"
             git push origin HEAD:${{ github.ref_name }}
           fi
