@@ -2,7 +2,7 @@ name: Anhmoe Video Scraper
 
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '0 */3 * * *'  # mỗi 3 tiếng
   workflow_dispatch:
     inputs:
       pages:
@@ -30,6 +30,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib oauth2client
 
+      - name: Clear previous Chrome/Driver cache (fix mismatch)
+        run: |
+          rm -f /usr/local/bin/chromedriver || true
+          rm -rf /opt/hostedtoolcache/setup-chrome || true
+          rm -rf /opt/google/chrome || true
+
       - name: Setup Chrome & matching ChromeDriver
         uses: browser-actions/setup-chrome@v1
         with:
@@ -37,11 +43,14 @@ jobs:
           install-chromedriver: true
           install-dependencies: true
 
-      - name: Verify Chrome & Driver versions
+      - name: Verify Chrome & Driver versions (debug)
         run: |
-          google-chrome --version || true
+          echo "Chrome version:"
+          google-chrome --version || google-chrome-stable --version
+          echo "ChromeDriver version:"
           chromedriver --version || true
-          which chromedriver || true
+          echo "Chrome binary path: $(which google-chrome || echo 'not found')"
+          echo "ChromeDriver path: $(which chromedriver || echo 'not found')"
 
       - name: Run scraper
         env:
@@ -54,13 +63,13 @@ jobs:
             python -u anhmoe/scraper.py all
           fi
 
-      - name: Debug file status
+      - name: Debug file status before commit
         run: |
           ls -la anhmoe/ || true
           git status --short || true
           [ -f anhmoe/videos_data.json ] && wc -l anhmoe/videos_data.json || echo "JSON not found"
 
-      - name: Commit and push changes (if any)
+      - name: Commit and push videos_data.json (if changed)
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
