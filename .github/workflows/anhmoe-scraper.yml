@@ -13,6 +13,8 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -30,63 +32,38 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib oauth2client
 
-      - name: Clear previous Chrome/Driver cache (fix mismatch)
-        run: |
-          rm -f /usr/local/bin/chromedriver || true
-          rm -rf /opt/hostedtoolcache/setup-chrome || true
-          rm -rf /opt/google/chrome || true
-
       - name: Setup Chrome & matching ChromeDriver
         uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
         with:
-          chrome-version: stable
+          chrome-version: 145.0.7632.117 # Ép dùng bản 145 để khớp với môi trường GitHub
           install-chromedriver: true
-          install-dependencies: true
-
-      - name: Verify Chrome & Driver versions (debug)
-        run: |
-          echo "Chrome version:"
-          google-chrome --version || google-chrome-stable --version
-          echo "ChromeDriver version:"
-          chromedriver --version || true
-          echo "Chrome binary path: $(which google-chrome || echo 'not found')"
-          echo "ChromeDriver path: $(which chromedriver || echo 'not found')"
 
       - name: Run scraper
         env:
+          # Cần khai báo đủ các Secret ở đây để Python os.getenv đọc được
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           ZPIC_COOKIES_BASE64: ${{ secrets.ZPIC_COOKIES_BASE64 }}
           ZPIC_USERNAME: ${{ secrets.ZPIC_USERNAME }}
           ZPIC_PASSWORD: ${{ secrets.ZPIC_PASSWORD }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.pages }}" ] && [ "${{ inputs.pages }}" != "all" ]; then
-            python -u anhmoe/scraper.py "${{ inputs.pages }}"
+          # Giữ nguyên logic cũ của bạn
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pages }}" ] && [ "${{ github.event.inputs.pages }}" != "all" ]; then
+            python -u anhmoe/scraper.py "${{ github.event.inputs.pages }}"
           else
             python -u anhmoe/scraper.py all
           fi
-
-      - name: Debug file status before commit
-        run: |
-          ls -la anhmoe/ || true
-          git status --short || true
-          [ -f anhmoe/videos_data.json ] && wc -l anhmoe/videos_data.json || echo "JSON not found"
 
       - name: Commit and push videos_data.json (if changed)
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          
           git fetch origin
           git rebase origin/${{ github.ref_name }} || { git rebase --abort; git merge origin/${{ github.ref_name }} --no-edit || git reset --hard origin/${{ github.ref_name }}; }
-          
           git add anhmoe/videos_data.json || true
-          
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update videos_data.json - scraped $(date +'%Y-%m-%d %H:%M UTC') [${{ github.run_id }}]"
+            git commit -m "Update videos_data.json - $(date +'%Y-%m-%d %H:%M')"
             git push origin HEAD:${{ github.ref_name }}
-            echo "Pushed successfully"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
