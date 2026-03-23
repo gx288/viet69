@@ -1,9 +1,11 @@
-# anhmoe/scraper.py
 import os
 import json
 import time
 import sys
 import subprocess
+import pickle
+import base64
+import tempfile
 from urllib.parse import unquote
 from pathlib import Path
 from selenium import webdriver
@@ -29,10 +31,14 @@ SPREADSHEET_ID = '1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU'
 SHEET_NAME = 'anhmoe videos'
 BASE_URL = 'https://zpic.io/category/video-nsfw'
 JSON_PATH = 'anhmoe/videos_data.json'
+COOKIE_FILE = 'zpic_cookies.pkl'  # chỉ dùng local, không commit
 
 HEADERS = ['Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link']
 
 # ────────────────────────────────────────────────
+# GOOGLE SHEET FUNCTIONS
+# ────────────────────────────────────────────────
+
 def get_or_create_sheet():
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
     try:
@@ -54,9 +60,13 @@ def load_sheet_video_urls(sheet):
     if not values or len(values) < 2:
         return set(), []
     existing_urls = {row[4] for row in values[1:] if len(row) > 4 and row[4].strip()}
-    existing_rows = values[1:]  # giữ nguyên thứ tự trong sheet
+    existing_rows = values[1:]
     print(f"Sheet cache: {len(existing_urls)} video URLs.")
     return existing_urls, existing_rows
+
+# ────────────────────────────────────────────────
+# JSON FUNCTIONS
+# ────────────────────────────────────────────────
 
 def load_json_video_data():
     path = Path(JSON_PATH)
@@ -82,7 +92,6 @@ def write_json(all_data):
 
 def append_or_update_json(new_rows):
     existing_urls, existing_data = load_json_video_data()
-    
     added_count = 0
     new_json_rows = []
     for row in new_rows:
@@ -99,9 +108,7 @@ def append_or_update_json(new_rows):
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
             })
             added_count += 1
-    
     if new_json_rows:
-        # Mới nhất lên đầu
         all_data = new_json_rows + existing_data
         write_json(all_data)
         print(f"Thêm {added_count} video mới vào JSON")
@@ -111,7 +118,6 @@ def append_or_update_json(new_rows):
 def sync_sheet_to_json_if_needed(sheet):
     sheet_urls, sheet_rows = load_sheet_video_urls(sheet)
     json_urls, json_data = load_json_video_data()
-    
     missing_in_json = []
     for row in sheet_rows:
         if len(row) < 5:
@@ -128,31 +134,92 @@ def sync_sheet_to_json_if_needed(sheet):
                 "page_link": row[6],
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
             })
-    
     if missing_in_json:
-        print(f"Đồng bộ {len(missing_in_json)} video từ Sheet → JSON (thiếu trong JSON)")
+        print(f"Đồng bộ {len(missing_in_json)} video từ Sheet → JSON")
         all_data = missing_in_json + json_data
         write_json(all_data)
 
 # ────────────────────────────────────────────────
+# MAIN SCRAPE FUNCTION
+# ────────────────────────────────────────────────
+
 def scrape_pages(max_pages=None):
     sheet = get_or_create_sheet()
-    existing_video_urls, _ = load_sheet_video_urls(sheet)  # ưu tiên Sheet làm cache chính
-    
+    existing_video_urls, _ = load_sheet_video_urls(sheet)
+
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1920,1080')
-    
+    options.add_argument('--disable-blink-features=AutomationControlled')
+
     print("Khởi tạo Selenium...")
     try:
         print("ChromeDriver version: " + subprocess.check_output(['chromedriver', '--version']).decode().strip())
     except:
         print("ChromeDriver: từ PATH")
-    
+
     driver = webdriver.Chrome(options=options)
+
+    # ─── LOAD COOKIE ───
+    cookies_loaded = False
+    driver.get("https://zpic.io/")
+    time.sleep(4)
+
+    if os.getenv('GITHUB_ACTIONS'):
+        print("Chạy trên GitHub Actions → dùng secret ZPIC_COOKIES_BASE64")
+        encoded = os.getenv('ZPIC_COOKIES_BASE64')
+        if encoded:
+            try:
+                decoded_bytes = base64.b64decode(encoded)
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as tmp:
+                    tmp.write(decoded_bytes)
+                    tmp_path = tmp.name
+
+                with open(tmp_path, 'rb') as f:
+                    cookies = pickle.load(f)
+
+                for cookie in cookies:
+                    if 'expiry' in cookie and (cookie['expiry'] is None or cookie['expiry'] < time.time()):
+                        cookie['expiry'] = -1
+                    try:
+                        driver.add_cookie(cookie)
+                    except:
+                        pass
+                cookies_loaded = True
+                print(f"Đã load {len(cookies)} cookies từ GitHub Secret")
+                os.unlink(tmp_path)
+            except Exception as e:
+                print(f"Lỗi decode/load secret: {e}")
+        else:
+            print("Không tìm thấy secret ZPIC_COOKIES_BASE64 → chạy không login")
+    else:
+        # Local
+        if os.path.exists(COOKIE_FILE):
+            try:
+                with open(COOKIE_FILE, 'rb') as f:
+                    cookies = pickle.load(f)
+                for cookie in cookies:
+                    if 'expiry' in cookie and (cookie['expiry'] is None or cookie['expiry'] < time.time()):
+                        cookie['expiry'] = -1
+                    driver.add_cookie(cookie)
+                cookies_loaded = True
+                print(f"Đã load {len(cookies)} cookies từ file local")
+            except Exception as e:
+                print(f"Lỗi load cookie local: {e}")
+
+    driver.get(BASE_URL)
+    time.sleep(6)
+
+    # Kiểm tra login
+    page_lower = driver.page_source.lower()
+    if "login" in driver.current_url.lower() or "sign in" in page_lower:
+        print("Vẫn bị redirect về login → cookie có thể hết hạn hoặc không hợp lệ")
+    else:
+        print("Cookie hoạt động → truy cập được nội dung")
+
     current_url = BASE_URL
     page_number = 1
     consecutive_duplicates = 0
@@ -171,7 +238,6 @@ def scrape_pages(max_pages=None):
             items = []
 
         page_new_rows = []
-
         for item in items:
             data_object_str = item.get_attribute('data-object') or ''
             video_url = ''
@@ -213,7 +279,7 @@ def scrape_pages(max_pages=None):
                 consecutive_duplicates += 1
                 if consecutive_duplicates > 5:
                     print(f">5 trùng liên tiếp → dừng scrape sớm")
-                    break  # break for, vẫn xử lý dữ liệu đã có
+                    break
                 continue
 
             consecutive_duplicates = 0
@@ -229,7 +295,7 @@ def scrape_pages(max_pages=None):
                 if not thumb_url and imgs:
                     thumb_url = imgs[0].get_attribute('src') or ''
             except:
-                thumb_url = item.get_attribute('data-thumb') or ''
+                thumb_url = ''
 
             author = ''
             try:
@@ -266,25 +332,18 @@ def scrape_pages(max_pages=None):
                 print("Không tìm thấy link next")
                 break
             page_number += 1
-            time.sleep(1.2)
+            time.sleep(2)
         except NoSuchElementException:
             print("Hết trang")
             break
 
     driver.quit()
 
-    # ─── XỬ LÝ GHI SAU KHI SCRAPE XONG ───
     if all_new_rows_this_run:
         print(f"\nTổng mới trong lần chạy: {len(all_new_rows_this_run)} video")
-
-        # 1. Ghi vào Sheet - chèn lên đầu (sau header)
         sheet.insert_rows(all_new_rows_this_run, row=2)
         print(f"Chèn {len(all_new_rows_this_run)} dòng mới vào đầu Sheet")
-
-        # 2. Ghi vào JSON
         append_or_update_json(all_new_rows_this_run)
-
-        # 3. Đồng bộ ngược Sheet → JSON nếu cần
         sync_sheet_to_json_if_needed(sheet)
     else:
         print("Không có dữ liệu mới nào trong lần chạy này.")
