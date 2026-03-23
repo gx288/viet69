@@ -31,12 +31,12 @@ SPREADSHEET_ID = '1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU'
 SHEET_NAME = 'anhmoe videos'
 BASE_URL = 'https://zpic.io/category/video-nsfw'
 JSON_PATH = 'anhmoe/videos_data.json'
-COOKIE_FILE = 'zpic_cookies.pkl'  # chỉ dùng local, không commit
+COOKIE_FILE = 'zpic_cookies.pkl'  # chỉ dùng local
 
 HEADERS = ['Title', 'Author', 'Duration', 'Thumb URL', 'Video URL', 'Page Number', 'Page Link']
 
 # ────────────────────────────────────────────────
-# GOOGLE SHEET FUNCTIONS
+# GOOGLE SHEET FUNCTIONS (giữ nguyên)
 # ────────────────────────────────────────────────
 
 def get_or_create_sheet():
@@ -60,12 +60,11 @@ def load_sheet_video_urls(sheet):
     if not values or len(values) < 2:
         return set(), []
     existing_urls = {row[4] for row in values[1:] if len(row) > 4 and row[4].strip()}
-    existing_rows = values[1:]
     print(f"Sheet cache: {len(existing_urls)} video URLs.")
-    return existing_urls, existing_rows
+    return existing_urls, values[1:]
 
 # ────────────────────────────────────────────────
-# JSON FUNCTIONS
+# JSON FUNCTIONS (giữ nguyên)
 # ────────────────────────────────────────────────
 
 def load_json_video_data():
@@ -92,7 +91,6 @@ def write_json(all_data):
 
 def append_or_update_json(new_rows):
     existing_urls, existing_data = load_json_video_data()
-   
     added_count = 0
     new_json_rows = []
     for row in new_rows:
@@ -109,7 +107,6 @@ def append_or_update_json(new_rows):
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
             })
             added_count += 1
-   
     if new_json_rows:
         all_data = new_json_rows + existing_data
         write_json(all_data)
@@ -120,7 +117,6 @@ def append_or_update_json(new_rows):
 def sync_sheet_to_json_if_needed(sheet):
     sheet_urls, sheet_rows = load_sheet_video_urls(sheet)
     json_urls, json_data = load_json_video_data()
-   
     missing_in_json = []
     for row in sheet_rows:
         if len(row) < 5:
@@ -137,7 +133,6 @@ def sync_sheet_to_json_if_needed(sheet):
                 "page_link": row[6],
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
             })
-   
     if missing_in_json:
         print(f"Đồng bộ {len(missing_in_json)} video từ Sheet → JSON")
         all_data = missing_in_json + json_data
@@ -167,7 +162,7 @@ def scrape_pages(max_pages=None):
 
     driver = webdriver.Chrome(options=options)
 
-    # ─── LOAD COOKIE ───
+    # ─── LOAD COOKIE & FALLBACK LOGIN ───
     cookies_loaded = False
     driver.get("https://zpic.io/")
     time.sleep(4)
@@ -177,11 +172,21 @@ def scrape_pages(max_pages=None):
         encoded = os.getenv('ZPIC_COOKIES_BASE64')
         if encoded:
             try:
-                # Clean base64 nếu có newline hoặc khoảng trắng thừa
-                encoded = encoded.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+                # Clean kỹ lưỡng
+                encoded = encoded.strip().replace('\n', '').replace('\r', '').replace(' ', '').replace('\t', '')
                 print(f"Độ dài base64 sau clean: {len(encoded)} ký tự")
-                
-                decoded_bytes = base64.b64decode(encoded)
+                print(f"Base64 đầu: {encoded[:50]}...")
+
+                # Thử decode chuẩn trước
+                try:
+                    decoded_bytes = base64.b64decode(encoded)
+                except base64.binascii.Error:
+                    # Nếu padding lỗi, thử add padding tự động (thường thiếu =)
+                    padding_needed = (4 - len(encoded) % 4) % 4
+                    encoded += '=' * padding_needed
+                    print(f"Thêm padding tự động: {padding_needed} ký tự '='")
+                    decoded_bytes = base64.b64decode(encoded)
+
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as tmp:
                     tmp.write(decoded_bytes)
                     tmp_path = tmp.name
@@ -195,18 +200,50 @@ def scrape_pages(max_pages=None):
                     try:
                         driver.add_cookie(cookie)
                     except Exception as add_err:
-                        print(f"Lỗi add cookie riêng lẻ: {add_err}")
+                        print(f"Lỗi add cookie riêng: {add_err}")
                 cookies_loaded = True
-                print(f"Đã load {len(cookies)} cookies từ GitHub Secret thành công")
+                print(f"ĐÃ LOAD THÀNH CÔNG {len(cookies)} cookies từ secret")
                 os.unlink(tmp_path)
-            except base64.binascii.Error as b64_err:
-                print(f"Lỗi base64 decode (Incorrect padding hoặc invalid base64): {b64_err}")
-                print("→ Kiểm tra lại secret: phải là chuỗi base64 sạch, không header BEGIN/END CERTIFICATE")
             except Exception as e:
-                print(f"Lỗi decode/load secret tổng quát: {e}")
-                print("→ Có thể secret bị cắt ngang hoặc hỏng khi paste → encode lại từ file .pkl local")
-        else:
-            print("Không tìm thấy secret ZPIC_COOKIES_BASE64 → chạy không login")
+                print(f"Lỗi decode/load secret: {e}")
+                print("→ Encode lại base64 từ file .pkl local và update secret")
+
+        # FALLBACK: Nếu cookie fail → thử login bằng acc từ secret
+        if not cookies_loaded:
+            username = os.getenv('ZPIC_USERNAME')
+            password = os.getenv('ZPIC_PASSWORD')
+            if username and password:
+                print("Cookie fail → thử login tự động bằng acc từ secret...")
+                driver.get("https://zpic.io/login")
+                time.sleep(6)
+
+                try:
+                    # Điền username / email
+                    user_field = driver.find_element(By.NAME, "login-subject")
+                    user_field.clear()
+                    user_field.send_keys(username)
+
+                    # Điền password
+                    pass_field = driver.find_element(By.NAME, "password")
+                    pass_field.clear()
+                    pass_field.send_keys(password)
+
+                    # Submit
+                    submit_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit'].cursor-pointer")
+                    submit_btn.click()
+                    time.sleep(10)  # chờ redirect sau login
+
+                    current_url = driver.current_url.lower()
+                    if "login" not in current_url and "signup" not in current_url:
+                        print("LOGIN TỰ ĐỘNG THÀNH CÔNG!")
+                        cookies_loaded = True
+                    else:
+                        print(f"Login tự động thất bại - URL hiện tại: {current_url}")
+                except Exception as login_err:
+                    print(f"Lỗi khi login tự động: {login_err}")
+            else:
+                print("Không có ZPIC_USERNAME/PASSWORD trong secret → bỏ qua login")
+
     else:
         # Local mode
         if os.path.exists(COOKIE_FILE):
@@ -230,10 +267,11 @@ def scrape_pages(max_pages=None):
     page_source_lower = driver.page_source.lower()
     print(f"URL sau load: {current_url_after}")
     if "login" in current_url_after.lower() or "sign in" in page_source_lower:
-        print("Vẫn bị redirect về login → cookie có thể hết hạn, không hợp lệ hoặc decode fail")
+        print("Vẫn bị redirect về login → cookie/login fail")
     else:
-        print("Cookie dường như hoạt động → truy cập được nội dung")
+        print("Truy cập thành công nội dung (cookie hoặc login hoạt động)")
 
+    # ─── PHẦN SCRAPE CHÍNH (giữ nguyên) ───
     current_url = BASE_URL
     page_number = 1
     consecutive_duplicates = 0
