@@ -2,7 +2,7 @@ name: Anhmoe Video Scraper
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 */3 * * *'          # mỗi 3 tiếng 1 lần (có thể đổi thành 0 * * * * nếu muốn mỗi giờ)
   workflow_dispatch:
     inputs:
       pages:
@@ -13,11 +13,12 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # cần full history để rebase tốt hơn
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -29,28 +30,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib oauth2client
 
-      - name: Setup Chrome & matching ChromeDriver
-        uses: browser-actions/setup-chrome@v2
+      - name: Setup Chrome & ChromeDriver
+        uses: browser-actions/setup-chrome@v1
         with:
-          chrome-version: 145          # chỉ định rõ version 145 để cố định (hoặc 'stable' nếu muốn auto, nhưng dễ mismatch)
-          install-chromedriver: true   # tự động cài driver khớp với chrome-version
-          install-dependencies: true
+          chrome-version: stable
+          install-chromedriver: true
 
-      - name: Verify versions (debug)
-        run: |
-          google-chrome --version || google-chrome-stable --version
-          chromedriver --version
-          which chromedriver
-          echo "PATH chromedriver: $(which chromedriver)"
-
-      - name: Verify versions
+      - name: Verify Chrome & Driver versions
         run: |
           google-chrome --version || true
           chromedriver --version || true
+          which chromedriver || true
 
       - name: Run scraper
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          ZPIC_COOKIES_BASE64: ${{ secrets.ZPIC_COOKIES_BASE64 }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.pages }}" ] && [ "${{ inputs.pages }}" != "all" ]; then
             python -u anhmoe/scraper.py "${{ inputs.pages }}"
@@ -58,46 +53,28 @@ jobs:
             python -u anhmoe/scraper.py all
           fi
 
-      - name: Debug file status before commit
+      - name: Debug file status
         run: |
-          ls -la anhmoe/
-          git status --short
-          git diff --stat || echo "No diff"
-          [ -f anhmoe/videos_data.json ] && wc -l anhmoe/videos_data.json || echo "JSON file not found"
+          ls -la anhmoe/ || true
+          git status --short || true
+          [ -f anhmoe/videos_data.json ] && wc -l anhmoe/videos_data.json || echo "JSON not found"
 
-      - name: Commit and push videos_data.json (if changed)
+      - name: Commit and push changes (if any)
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-
-          # Debug trước
-          git status --short
-          git diff --stat || echo "No diff before stash"
-
-          # Stash thay đổi từ scraper (nếu có)
-          git stash push -m "Scraper updates - temp stash" || true
-
-          # Pull + rebase an toàn
+          
           git fetch origin
-          if ! git rebase origin/${{ github.ref_name }}; then
-            echo "Rebase thất bại → abort rebase và thử merge thay thế"
-            git rebase --abort || true
-            git merge origin/${{ github.ref_name }} --no-edit || { echo "Merge cũng fail → reset hard (cẩn thận)"; git reset --hard origin/${{ github.ref_name }}; }
-          fi
-
-          # Apply stash lại (nếu có)
-          git stash pop || echo "No stash to pop"
-
-          # Add file
+          git rebase origin/${{ github.ref_name }} || { git rebase --abort; git merge origin/${{ github.ref_name }} --no-edit || git reset --hard origin/${{ github.ref_name }}; }
+          
           git add anhmoe/videos_data.json || true
-
-          # Check lại diff staged
+          
           if git diff --staged --quiet; then
-            echo "Không có thay đổi sau tất cả → bỏ qua commit"
+            echo "No changes to commit"
           else
-            git commit -m "Update videos_data.json - scraped $(date +'%Y-%m-%d %H:%M:%S UTC') [run ${{ github.run_id }}] - added ~122 new videos"
+            git commit -m "Update videos_data.json - scraped $(date +'%Y-%m-%d %H:%M UTC') [${{ github.run_id }}]"
             git push origin HEAD:${{ github.ref_name }}
-            echo "Đã push thành công"
+            echo "Pushed successfully"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
