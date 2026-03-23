@@ -2,7 +2,7 @@ name: Anhmoe Video Scraper
 
 on:
   schedule:
-    - cron: '0 */3 * * *'          # mỗi 3 tiếng 1 lần (có thể đổi thành 0 * * * * nếu muốn mỗi giờ)
+    - cron: '0 */3 * * *'
   workflow_dispatch:
     inputs:
       pages:
@@ -30,11 +30,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib oauth2client
 
-      - name: Setup Chrome & ChromeDriver
+      - name: Setup Chrome & matching ChromeDriver
         uses: browser-actions/setup-chrome@v1
         with:
           chrome-version: stable
           install-chromedriver: true
+          install-dependencies: true
 
       - name: Verify Chrome & Driver versions
         run: |
