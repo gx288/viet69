@@ -38,6 +38,7 @@ jobs:
 
       - name: Setup Chrome & matching ChromeDriver
         uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
         with:
           chrome-version: stable
           install-chromedriver: true
@@ -45,12 +46,16 @@ jobs:
 
       - name: Verify Chrome & Driver versions (debug)
         run: |
+          echo "Chrome path from action: ${{ steps.setup-chrome.outputs.chrome-path }}"
           echo "Chrome version:"
-          google-chrome --version || google-chrome-stable --version
+          "${{ steps.setup-chrome.outputs.chrome-path }}" --version || echo "Failed to run chrome --version"
+          
+          echo "ChromeDriver path from action: ${{ steps.setup-chrome.outputs.chromedriver-path }}"
           echo "ChromeDriver version:"
-          chromedriver --version || true
-          echo "Chrome binary path: $(which google-chrome || echo 'not found')"
-          echo "ChromeDriver path: $(which chromedriver || echo 'not found')"
+          "${{ steps.setup-chrome.outputs.chromedriver-path }}" --version || echo "Failed to run chromedriver --version"
+          
+          echo "Additional check - ls cache dir:"
+          ls -la /opt/hostedtoolcache/setup-chrome/chromium/stable/x64/ || true
 
       - name: Run scraper
         env:
