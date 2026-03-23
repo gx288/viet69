@@ -2,7 +2,7 @@ name: Anhmoe Video Scraper
 
 on:
   schedule:
-    - cron: '0 */3 * * *'  # mỗi 3 tiếng
+    - cron: '0 */3 * * *'  # Chạy tự động mỗi 3 tiếng
   workflow_dispatch:
     inputs:
       pages:
@@ -13,6 +13,9 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    # Thêm quyền ghi để Bot có thể push file JSON lên lại repo
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -30,66 +33,44 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib oauth2client
 
-      - name: Clear previous Chrome/Driver cache (fix mismatch)
-        run: |
-          rm -f /usr/local/bin/chromedriver || true
-          rm -rf /opt/hostedtoolcache/setup-chrome || true
-          rm -rf /opt/google/chrome || true
-
       - name: Setup Chrome & matching ChromeDriver
         uses: browser-actions/setup-chrome@v1
         id: setup-chrome
         with:
           chrome-version: stable
           install-chromedriver: true
-          install-dependencies: true
-
-      - name: Verify Chrome & Driver versions (debug)
-        run: |
-          echo "Chrome path from action: ${{ steps.setup-chrome.outputs.chrome-path }}"
-          echo "Chrome version:"
-          "${{ steps.setup-chrome.outputs.chrome-path }}" --version || echo "Failed to run chrome --version"
-          
-          echo "ChromeDriver path from action: ${{ steps.setup-chrome.outputs.chromedriver-path }}"
-          echo "ChromeDriver version:"
-          "${{ steps.setup-chrome.outputs.chromedriver-path }}" --version || echo "Failed to run chromedriver --version"
-          
-          echo "Additional check - ls cache dir:"
-          ls -la /opt/hostedtoolcache/setup-chrome/chromium/stable/x64/ || true
 
       - name: Run scraper
         env:
+          # Truyền tất cả Secret vào biến môi trường
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           ZPIC_COOKIES_BASE64: ${{ secrets.ZPIC_COOKIES_BASE64 }}
+          ZPIC_USERNAME: ${{ secrets.ZPIC_USERNAME }}
+          ZPIC_PASSWORD: ${{ secrets.ZPIC_PASSWORD }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.pages }}" ] && [ "${{ inputs.pages }}" != "all" ]; then
-            python -u anhmoe/scraper.py "${{ inputs.pages }}"
-          else
-            python -u anhmoe/scraper.py all
+          # Xử lý tham số đầu vào từ workflow_dispatch hoặc mặc định là 'all'
+          INPUT_PAGES="${{ github.event.inputs.pages }}"
+          if [ -z "$INPUT_PAGES" ]; then
+            INPUT_PAGES="all"
           fi
-
-      - name: Debug file status before commit
-        run: |
-          ls -la anhmoe/ || true
-          git status --short || true
-          [ -f anhmoe/videos_data.json ] && wc -l anhmoe/videos_data.json || echo "JSON not found"
-
-      - name: Commit and push videos_data.json (if changed)
-        run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
           
-          git fetch origin
-          git rebase origin/${{ github.ref_name }} || { git rebase --abort; git merge origin/${{ github.ref_name }} --no-edit || git reset --hard origin/${{ github.ref_name }}; }
+          # Chạy script với đường dẫn chính xác
+          python -u anhmoe/scraper.py "$INPUT_PAGES"
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Cập nhật code mới nhất trước khi push để tránh xung đột
+          git pull origin ${{ github.ref_name }} --rebase
           
           git add anhmoe/videos_data.json || true
           
+          # Kiểm tra xem có thay đổi gì không trước khi commit
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "Không có dữ liệu mới để cập nhật."
           else
-            git commit -m "Update videos_data.json - scraped $(date +'%Y-%m-%d %H:%M UTC') [${{ github.run_id }}]"
+            git commit -m "Auto-update video data: $(date +'%Y-%m-%d %H:%M')"
             git push origin HEAD:${{ github.ref_name }}
-            echo "Pushed successfully"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
