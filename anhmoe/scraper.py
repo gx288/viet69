@@ -92,6 +92,7 @@ def write_json(all_data):
 
 def append_or_update_json(new_rows):
     existing_urls, existing_data = load_json_video_data()
+   
     added_count = 0
     new_json_rows = []
     for row in new_rows:
@@ -108,6 +109,7 @@ def append_or_update_json(new_rows):
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
             })
             added_count += 1
+   
     if new_json_rows:
         all_data = new_json_rows + existing_data
         write_json(all_data)
@@ -118,6 +120,7 @@ def append_or_update_json(new_rows):
 def sync_sheet_to_json_if_needed(sheet):
     sheet_urls, sheet_rows = load_sheet_video_urls(sheet)
     json_urls, json_data = load_json_video_data()
+   
     missing_in_json = []
     for row in sheet_rows:
         if len(row) < 5:
@@ -134,6 +137,7 @@ def sync_sheet_to_json_if_needed(sheet):
                 "page_link": row[6],
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S %z")
             })
+   
     if missing_in_json:
         print(f"Đồng bộ {len(missing_in_json)} video từ Sheet → JSON")
         all_data = missing_in_json + json_data
@@ -159,7 +163,7 @@ def scrape_pages(max_pages=None):
     try:
         print("ChromeDriver version: " + subprocess.check_output(['chromedriver', '--version']).decode().strip())
     except:
-        print("ChromeDriver: từ PATH")
+        print("ChromeDriver: từ PATH hoặc action")
 
     driver = webdriver.Chrome(options=options)
 
@@ -173,6 +177,10 @@ def scrape_pages(max_pages=None):
         encoded = os.getenv('ZPIC_COOKIES_BASE64')
         if encoded:
             try:
+                # Clean base64 nếu có newline hoặc khoảng trắng thừa
+                encoded = encoded.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+                print(f"Độ dài base64 sau clean: {len(encoded)} ký tự")
+                
                 decoded_bytes = base64.b64decode(encoded)
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.pkl') as tmp:
                     tmp.write(decoded_bytes)
@@ -186,17 +194,21 @@ def scrape_pages(max_pages=None):
                         cookie['expiry'] = -1
                     try:
                         driver.add_cookie(cookie)
-                    except:
-                        pass
+                    except Exception as add_err:
+                        print(f"Lỗi add cookie riêng lẻ: {add_err}")
                 cookies_loaded = True
-                print(f"Đã load {len(cookies)} cookies từ GitHub Secret")
+                print(f"Đã load {len(cookies)} cookies từ GitHub Secret thành công")
                 os.unlink(tmp_path)
+            except base64.binascii.Error as b64_err:
+                print(f"Lỗi base64 decode (Incorrect padding hoặc invalid base64): {b64_err}")
+                print("→ Kiểm tra lại secret: phải là chuỗi base64 sạch, không header BEGIN/END CERTIFICATE")
             except Exception as e:
-                print(f"Lỗi decode/load secret: {e}")
+                print(f"Lỗi decode/load secret tổng quát: {e}")
+                print("→ Có thể secret bị cắt ngang hoặc hỏng khi paste → encode lại từ file .pkl local")
         else:
             print("Không tìm thấy secret ZPIC_COOKIES_BASE64 → chạy không login")
     else:
-        # Local
+        # Local mode
         if os.path.exists(COOKIE_FILE):
             try:
                 with open(COOKIE_FILE, 'rb') as f:
@@ -213,12 +225,14 @@ def scrape_pages(max_pages=None):
     driver.get(BASE_URL)
     time.sleep(6)
 
-    # Kiểm tra login
-    page_lower = driver.page_source.lower()
-    if "login" in driver.current_url.lower() or "sign in" in page_lower:
-        print("Vẫn bị redirect về login → cookie có thể hết hạn hoặc không hợp lệ")
+    # Debug sau load
+    current_url_after = driver.current_url
+    page_source_lower = driver.page_source.lower()
+    print(f"URL sau load: {current_url_after}")
+    if "login" in current_url_after.lower() or "sign in" in page_source_lower:
+        print("Vẫn bị redirect về login → cookie có thể hết hạn, không hợp lệ hoặc decode fail")
     else:
-        print("Cookie hoạt động → truy cập được nội dung")
+        print("Cookie dường như hoạt động → truy cập được nội dung")
 
     current_url = BASE_URL
     page_number = 1
