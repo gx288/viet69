@@ -1128,3 +1128,10 @@
 2026-04-29 03:36:04,414 - INFO - [Việt Nam] Trang 1 → 0 | +0
 2026-04-29 03:36:04,415 - INFO - [Việt Nam] HOÀN TẤT → 0 video
 2026-04-29 03:36:09,661 - INFO - HOÀN TẤT! ĐÃ UP LÊN SHEETS
+2026-04-30 03:34:11,605 - INFO - TẢI DANH SÁCH PROXY SỐNG MỚI...
+2026-04-30 03:34:12,235 - INFO - ĐÃ TẢI 973 PROXY SỐNG!
+2026-04-30 03:34:12,236 - INFO - === BẮT ĐẦU SCRAPE – SIÊU NHANH VỚI PROXY SỐNG SẴN ===
+2026-04-30 03:34:12,236 - INFO - [Việt Nam] Trang 1
+2026-04-30 03:36:42,404 - INFO - [Việt Nam] Trang 1 → 0 | +0
+2026-04-30 03:36:42,405 - INFO - [Việt Nam] HOÀN TẤT → 0 video
+2026-04-30 03:39:47,969 - ERROR - Lỗi Sheets: APIError: [503]: The service is currently unavailable.
