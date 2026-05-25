@@ -32,12 +32,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium gspread google-auth google-auth-oauthlib oauth2client
 
-      - name: Setup Chrome & matching ChromeDriver
-        uses: browser-actions/setup-chrome@v1
-        id: setup-chrome
-        with:
-          chrome-version: 145.0.7632.117 # Ép dùng bản 145 để khớp với môi trường GitHub
-          install-chromedriver: true
+
 
       - name: Run scraper
         env:
