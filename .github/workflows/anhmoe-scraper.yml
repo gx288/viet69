@@ -53,12 +53,11 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          git fetch origin
-          git rebase origin/${{ github.ref_name }} || { git rebase --abort; git merge origin/${{ github.ref_name }} --no-edit || git reset --hard origin/${{ github.ref_name }}; }
           git add anhmoe/videos_data.json anhmoe/config.json || true
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update videos_data.json - $(date +'%Y-%m-%d %H:%M')"
+            git commit -m "Update scraper data/config - $(date +'%Y-%m-%d %H:%M')"
+            git pull --rebase origin ${{ github.ref_name }} || { git rebase --abort; git pull origin ${{ github.ref_name }} --no-edit; }
             git push origin HEAD:${{ github.ref_name }}
           fi
