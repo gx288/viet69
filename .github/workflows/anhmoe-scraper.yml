@@ -55,7 +55,7 @@ jobs:
           git config --global user.email "actions@github.com"
           git fetch origin
           git rebase origin/${{ github.ref_name }} || { git rebase --abort; git merge origin/${{ github.ref_name }} --no-edit || git reset --hard origin/${{ github.ref_name }}; }
-          git add anhmoe/videos_data.json || true
+          git add anhmoe/videos_data.json anhmoe/config.json || true
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else

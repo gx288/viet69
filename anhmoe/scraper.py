@@ -95,52 +95,27 @@ def scrape_pages(max_pages=None):
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,1080')
-    # QUAN TRỌNG: Thêm User-Agent để server không block session
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     options.add_argument('--disable-blink-features=AutomationControlled')
 
     driver = webdriver.Chrome(options=options)
     wait = WebDriverWait(driver, 20)
 
-    # ─── ĐĂNG NHẬP THẲNG BẰNG ACCOUNT ───
-    username = os.getenv('ZPIC_USERNAME')
-    password = os.getenv('ZPIC_PASSWORD')
+    # ─── ĐỌC CẤU HÌNH CONFIG ───
+    CONFIG_PATH = 'anhmoe/config.json'
+    config_data = {
+        "base_url": "https://zpic.io/category/video-nsfw",
+        "pending_redirect_url": "",
+        "redirect_count": 0
+    }
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                config_data.update(json.load(f))
+        except Exception as e:
+            print(f"Lỗi đọc config.json: {e}")
 
-    if not username or not password:
-        print("❌ Lỗi: Thiếu ZPIC_USERNAME hoặc ZPIC_PASSWORD trong Secret!")
-        driver.quit()
-        return
-
-    try:
-        print(f"🔄 Đang tiến hành đăng nhập cho: {username}")
-        driver.get("https://zpic.io/login")
-        
-        # Đợi các trường input xuất hiện
-        user_input = wait.until(EC.presence_of_element_located((By.NAME, "login-subject")))
-        pass_input = driver.find_element(By.NAME, "password")
-
-        user_input.send_keys(username)
-        pass_input.send_keys(password)
-        
-        # Click nút submit
-        driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
-        
-        # Đợi chuyển hướng sau khi login thành công
-        time.sleep(8)
-        
-        if "login" in driver.current_url.lower():
-            print("❌ Đăng nhập thất bại - Vẫn ở trang login")
-            driver.quit()
-            return
-        print("✅ ĐĂNG NHẬP THÀNH CÔNG!")
-
-    except Exception as e:
-        print(f"❌ Lỗi trong quá trình đăng nhập: {e}")
-        driver.quit()
-        return
-
-    # ─── BẮT ĐẦU SCRAPE ───
-    current_url = BASE_URL
+    current_url = config_data.get("base_url")
     page_number = 1
     all_new_rows_this_run = []
 
@@ -149,10 +124,46 @@ def scrape_pages(max_pages=None):
         driver.get(current_url)
         time.sleep(5)
 
-        # Kiểm tra xem có bị đá ra trang login không
-        if "login" in driver.current_url.lower():
-            print("⚠️ Bị redirect về login - Session hỏng. Dừng.")
-            break
+        # ─── KIỂM TRA REDIRECT Ở TRANG ĐẦU TIÊN ───
+        if page_number == 1:
+            actual_url = driver.current_url
+            clean_actual = actual_url.rstrip('/')
+            clean_target = current_url.rstrip('/')
+            config_changed = False
+            
+            if clean_actual != clean_target and "login" not in clean_actual.lower():
+                print(f"⚠️ Phát hiện redirect! (Từ {clean_target} -> {clean_actual})")
+                pending_url = config_data.get("pending_redirect_url", "")
+                
+                if clean_actual == pending_url.rstrip('/'):
+                    config_data["redirect_count"] = config_data.get("redirect_count", 0) + 1
+                    print(f"  -> Lần redirect thứ {config_data['redirect_count']}/5")
+                else:
+                    config_data["pending_redirect_url"] = actual_url
+                    config_data["redirect_count"] = 1
+                    print("  -> Bắt đầu theo dõi URL mới này.")
+                    
+                if config_data["redirect_count"] >= 5:
+                    print(f"🔄 Đã đạt 5 lần redirect liên tiếp. Cập nhật BASE_URL chính thức thành {actual_url}")
+                    config_data["base_url"] = actual_url
+                    config_data["pending_redirect_url"] = ""
+                    config_data["redirect_count"] = 0
+                    
+                config_changed = True
+                current_url = actual_url  # Chạy tiếp với link thực tế
+            else:
+                # Nếu không bị redirect thì reset theo dõi
+                if config_data.get("redirect_count", 0) > 0:
+                    config_data["pending_redirect_url"] = ""
+                    config_data["redirect_count"] = 0
+                    config_changed = True
+
+            if config_changed:
+                try:
+                    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                        json.dump(config_data, f, indent=2)
+                except Exception as e:
+                    print(f"Lỗi ghi config.json: {e}")
 
         items = driver.find_elements(By.CSS_SELECTOR, 'div.list-item')
         if not items:
