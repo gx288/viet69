@@ -356,27 +356,54 @@ def main():
             has_new_posts = True
             break
 
-    if has_new_posts:
-        logger.info("New posts found on page 1. Scraping all pages.")
+    # Check for FORCE_FULL_SCRAPE environment variable
+    force_full = os.environ.get("FORCE_FULL_SCRAPE", "false").lower() == "true"
+
+    if has_new_posts or force_full:
+        logger.info("New posts found or force full enabled. Scraping all pages.")
         pages_to_scrape = max_pages
     else:
         logger.info(f"No new posts on page 1. Scraping first {LIMIT_PAGES_NO_NEW} pages for stats update.")
         pages_to_scrape = LIMIT_PAGES_NO_NEW
 
-    # Now scrape the determined range in batches
-    page_num = 1  # Start from 1, but since page 1 is already scraped, start from 2 if needed
-    if pages_to_scrape > 1:
-        page_num = 2  # Skip page 1 since already scraped
-        # Add page 1 data to all_video_data
+    # Determine initial list of pages to scrape
+    pages_list = list(range(1, pages_to_scrape + 1))
+    
+    # Gap Detection: Find missing pages in the existing data up to the maximum page recorded
+    existing_pages = {int(item['page']) for item in existing_data if 'page' in item}
+    if existing_pages:
+        max_existing_page = max(existing_pages)
+        missing_pages = [p for p in range(1, max_existing_page) if p not in existing_pages]
+        if missing_pages:
+            logger.info(f"Gap detection: Found {len(missing_pages)} missing pages in database: {missing_pages[:20]}...")
+            for p in missing_pages:
+                if p not in pages_list:
+                    pages_list.append(p)
+            pages_list.sort()
+
+    # Now scrape the determined pages in batches
+    pages_to_process = [p for p in pages_list if p != 1]
+    if 1 in pages_list:
         all_video_data.extend(page1_data)
 
-    while page_num <= pages_to_scrape and not stop_scraping:
-        start_page = page_num
-        end_page = min(page_num + batch_size - 1, pages_to_scrape)
+    for i in range(0, len(pages_to_process), batch_size):
+        if stop_scraping:
+            break
+        batch = pages_to_process[i:i+batch_size]
         
-        process_batch(start_page, end_page)
-        
-        page_num += batch_size
+        # Enqueue pages for this batch
+        for p in batch:
+            page_queue.put(p)
+            
+        logger.info(f"Processing batch of pages: {batch}")
+        threads = []
+        for j in range(NUM_THREADS):
+            t = threading.Thread(target=worker, name=f"Worker-{j}")
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
 
     # Merge and override data
     with data_lock:

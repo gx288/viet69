@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '5 * * * *'  # 7:00 AM VN time
   workflow_dispatch:
+    inputs:
+      force_full:
+        description: 'Force full scrape of all pages'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   scrape:
@@ -30,6 +36,8 @@ jobs:
         cat credentials.json  # Debug
 
     - name: Run script
+      env:
+        FORCE_FULL_SCRAPE: ${{ github.event.inputs.force_full }}
       run: |
         python find_and_test_proxies.py
         python scrape_videos.py
