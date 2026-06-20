@@ -10,6 +10,7 @@ from google.oauth2.service_account import Credentials
 import os
 from urllib.parse import urljoin, urlparse
 import logging
+import random
 
 # Set up logging
 logging.basicConfig(
@@ -51,6 +52,53 @@ if config.get('PROXY'):
         'https': config['PROXY']
     }
 
+# Load working proxies pool
+working_proxies = []
+if os.path.exists("working_proxies.txt"):
+    try:
+        with open("working_proxies.txt", "r", encoding="utf-8") as f:
+            working_proxies = [line.strip() for line in f if line.strip()]
+        logger.info(f"Loaded {len(working_proxies)} active proxies for pool rotation.")
+    except Exception as e:
+        logger.error(f"Failed to load working_proxies.txt: {e}")
+
+def requests_get_with_retry(url, max_retries=5):
+    global working_proxies
+    for attempt in range(max_retries):
+        proxy_url = None
+        proxies_config = None
+        
+        if working_proxies:
+            proxy_url = random.choice(working_proxies)
+            proxies_config = {
+                'http': proxy_url,
+                'https': proxy_url
+            }
+            
+        try:
+            response = requests.get(url, headers=headers, impersonate="chrome120", timeout=10, proxies=proxies_config)
+            if response.status_code == 200:
+                return response
+            elif response.status_code == 403:
+                logger.warning(f"Proxy {proxy_url} got 403 Forbidden. Rotating...")
+            else:
+                logger.warning(f"Proxy {proxy_url} got status {response.status_code}. Rotating...")
+        except Exception as e:
+            logger.warning(f"Request failed with proxy {proxy_url}: {str(e)}. Rotating...")
+            
+        # If proxy failed, remove it from pool thread-safely
+        if proxy_url and proxy_url in working_proxies:
+            with data_lock:
+                if proxy_url in working_proxies:
+                    working_proxies.remove(proxy_url)
+                    logger.info(f"Removed dead proxy: {proxy_url}. Remaining active proxies: {len(working_proxies)}")
+                    
+        time.sleep(1)
+        
+    # If we get here, all retries failed. Attempt one last direct request as fallback.
+    logger.info("All proxy retries failed. Attempting final request without proxy...")
+    return requests.get(url, headers=headers, impersonate="chrome120", timeout=10)
+
 # Thread-safe queue and lock
 page_queue = queue.Queue()
 all_video_data = []
@@ -79,7 +127,7 @@ def scrape_page(page_num):
         else:
             url = f"{DOMAIN}/page/{page_num}/"
         
-        response = requests.get(url, headers=headers, impersonate="chrome120", timeout=10, proxies=proxies)
+        response = requests_get_with_retry(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -248,7 +296,7 @@ def check_domain_redirect():
     
     for i in range(3):
         try:
-            response = requests.get(DOMAIN, headers=headers, impersonate="chrome120", timeout=10, proxies=proxies)
+            response = requests_get_with_retry(DOMAIN)
             if response.status_code == 200:
                 parsed_final = urlparse(response.url)
                 final_base = f"{parsed_final.scheme}://{parsed_final.netloc}"

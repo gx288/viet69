@@ -95,13 +95,13 @@ def main():
 
     random.shuffle(candidates)
     
-    # We only test a subset (e.g. 500) to save time, and stop once we find 3 working ones
-    test_limit = min(500, len(candidates))
+    # We test up to 1000 random candidates to find multiple working ones
+    test_limit = min(1000, len(candidates))
     to_test = candidates[:test_limit]
     print(f"[*] Testing up to {test_limit} random candidates...")
 
     working_proxies = []
-    max_workers = 30  # Keep workers moderate to prevent system overload
+    max_workers = 50  # Increase workers slightly to speed up search for multiple proxies
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(test_proxy, p, target_url): p for p in to_test}
@@ -111,14 +111,24 @@ def main():
             if res:
                 working_proxies.append(res)
                 print(f"    [+] Working: {res[0]} (Time: {res[1]:.2f}s)")
-                # Stop early if we find 3 working proxies
-                if len(working_proxies) >= 3:
-                    print("[*] Found 3 working proxies. Stopping test.")
+                # Stop early if we find 20 working proxies
+                if len(working_proxies) >= 20:
+                    print("[*] Found 20 working proxies. Stopping test.")
                     break
 
     if working_proxies:
         # Sort by response time
         working_proxies.sort(key=lambda x: x[1])
+        
+        # Save all working proxies to working_proxies.txt
+        try:
+            with open("working_proxies.txt", "w", encoding="utf-8") as f:
+                for p, t in working_proxies:
+                    f.write(f"{p}\n")
+            print(f"[*] Saved {len(working_proxies)} working proxies to working_proxies.txt")
+        except Exception as e:
+            print(f"[!] Failed to save working_proxies.txt: {e}")
+            
         best_proxy = working_proxies[0][0]
         print(f"\n[*] Best working proxy found: {best_proxy}")
         
@@ -126,7 +136,7 @@ def main():
         config["PROXY"] = best_proxy
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-        print("[*] Successfully updated config.json with the new proxy.")
+        print("[*] Successfully updated config.json with the best proxy.")
     else:
         print("\n[!] No working proxies found in this batch. Please try again.")
 
