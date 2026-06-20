@@ -11,6 +11,21 @@ import os
 from urllib.parse import urljoin, urlparse
 import logging
 import random
+import re
+
+def get_total_pages(soup):
+    if not soup:
+        return 1
+    total_pages = 1
+    for a in soup.find_all('a'):
+        href = a.get('href', '')
+        if href:
+            match = re.search(r'/page/(\d+)/?', href)
+            if match:
+                page_num = int(match.group(1))
+                if page_num > total_pages:
+                    total_pages = page_num
+    return total_pages
 
 # Set up logging
 logging.basicConfig(
@@ -201,9 +216,11 @@ def scrape_page(page_num):
                 logger.info(f"Found {len(all_video_data)} items on pages {total_pages_scraped-99} to {total_pages_scraped}")
         
         time.sleep(DETAIL_DELAY)
+        return soup
     
     except Exception as e:
         logger.error(f"Error scraping page {page_num}: {str(e)}")
+        return None
 
 def worker():
     """Worker thread to process pages from queue."""
@@ -346,7 +363,7 @@ def main():
     logger.info("Scraping page 1 to check for new posts")
     all_video_data = []  # Reset for page 1
     stop_scraping = False
-    scrape_page(1)  # Scrape page 1 synchronously
+    soup = scrape_page(1)  # Scrape page 1 synchronously and get soup
     page1_data = all_video_data[:]
     all_video_data = []  # Reset for further scraping
 
@@ -356,12 +373,27 @@ def main():
             has_new_posts = True
             break
 
+    # Parse total pages on website
+    total_pages_on_web = get_total_pages(soup)
+    logger.info(f"Total pages on website: {total_pages_on_web}")
+
+    # Determine maximum page currently in database
+    existing_pages = {int(item['page']) for item in existing_data if 'page' in item}
+    max_existing_page = max(existing_pages) if existing_pages else 0
+    logger.info(f"Max page in database: {max_existing_page}")
+
     # Check for FORCE_FULL_SCRAPE environment variable
     force_full = os.environ.get("FORCE_FULL_SCRAPE", "false").lower() == "true"
 
-    if has_new_posts or force_full:
-        logger.info("New posts found or force full enabled. Scraping all pages.")
-        pages_to_scrape = max_pages
+    # Database is incomplete if max_existing_page is less than total_pages_on_web
+    is_incomplete = max_existing_page < total_pages_on_web
+
+    if has_new_posts or force_full or is_incomplete:
+        if is_incomplete:
+            logger.info(f"Database is incomplete ({max_existing_page} < {total_pages_on_web}). Triggering recovery full scrape.")
+        else:
+            logger.info("New posts found or force full enabled. Scraping all pages.")
+        pages_to_scrape = total_pages_on_web
     else:
         logger.info(f"No new posts on page 1. Scraping first {LIMIT_PAGES_NO_NEW} pages for stats update.")
         pages_to_scrape = LIMIT_PAGES_NO_NEW
@@ -370,9 +402,7 @@ def main():
     pages_list = list(range(1, pages_to_scrape + 1))
     
     # Gap Detection: Find missing pages in the existing data up to the maximum page recorded
-    existing_pages = {int(item['page']) for item in existing_data if 'page' in item}
     if existing_pages:
-        max_existing_page = max(existing_pages)
         missing_pages = [p for p in range(1, max_existing_page) if p not in existing_pages]
         if missing_pages:
             logger.info(f"Gap detection: Found {len(missing_pages)} missing pages in database: {missing_pages[:20]}...")
