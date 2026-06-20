@@ -148,6 +148,7 @@ total_pages_scraped = 0
 LAST_CHECKPOINT_ID = config.get('LAST_CHECKPOINT_ID')
 checkpoint_hit = False
 ignore_checkpoint = False
+successful_pages = set()
 
 def convert_views(views_str):
     """Convert views string (e.g., '128.67K', '1.5M') to integer."""
@@ -163,7 +164,7 @@ def convert_views(views_str):
 
 def scrape_page(page_num):
     """Scrape data from a single page."""
-    global total_pages_scraped, stop_scraping, checkpoint_hit
+    global total_pages_scraped, stop_scraping, checkpoint_hit, successful_pages
     try:
         if page_num == 1:
             url = DOMAIN
@@ -178,6 +179,7 @@ def scrape_page(page_num):
         if not items:
             with data_lock:
                 stop_scraping = True
+                successful_pages.add(page_num)
                 logger.info(f"Last page: {page_num}, found 0 items")
             return
         
@@ -246,6 +248,7 @@ def scrape_page(page_num):
         
         with data_lock:
             all_video_data.extend(page_data)
+            successful_pages.add(page_num)
             total_pages_scraped += 1
             if total_pages_scraped % 100 == 0:
                 logger.info(f"Found {len(all_video_data)} items on pages {total_pages_scraped-99} to {total_pages_scraped}")
@@ -437,30 +440,52 @@ def main():
 
     # Now scrape the determined pages in batches
     pages_to_process = [p for p in pages_list if p != 1]
+    # Now scrape the determined pages in batches with retry for failed pages
+    pages_to_process = [p for p in pages_list if p != 1]
     if 1 in pages_list:
         all_video_data.extend(page1_data)
+        successful_pages.add(1)
 
-    if ignore_checkpoint:
-        stop_scraping = False
-
-    for i in range(0, len(pages_to_process), batch_size):
-        if stop_scraping:
+    max_retry_rounds = 5
+    for round_num in range(1, max_retry_rounds + 1):
+        if not pages_to_process:
             break
-        batch = pages_to_process[i:i+batch_size]
+            
+        if ignore_checkpoint:
+            stop_scraping = False
+            
+        logger.info(f"--- Scrape Round {round_num}: processing {len(pages_to_process)} pages ---")
         
-        # Enqueue pages for this batch
-        for p in batch:
-            page_queue.put(p)
+        # Enqueue and process in batches
+        for i in range(0, len(pages_to_process), batch_size):
+            if stop_scraping:
+                break
+            batch = pages_to_process[i:i+batch_size]
             
-        logger.info(f"Processing batch of pages: {batch}")
-        threads = []
-        for j in range(NUM_THREADS):
-            t = threading.Thread(target=worker, name=f"Worker-{j}")
-            t.start()
-            threads.append(t)
-            
-        for t in threads:
-            t.join()
+            for p in batch:
+                page_queue.put(p)
+                
+            logger.info(f"Processing batch of pages: {batch}")
+            threads = []
+            for j in range(NUM_THREADS):
+                t = threading.Thread(target=worker, name=f"Worker-{j}")
+                t.start()
+                threads.append(t)
+                
+            for t in threads:
+                t.join()
+                
+        # Calculate failed pages in this round
+        failed_pages = [p for p in pages_list if p not in successful_pages]
+        if failed_pages:
+            logger.warning(f"Round {round_num} finished with {len(failed_pages)} failed pages: {failed_pages[:20]}...")
+            pages_to_process = failed_pages
+            # Sleep briefly between retry rounds
+            time.sleep(2)
+        else:
+            logger.info("All pages scraped successfully!")
+            pages_to_process = []
+            break
 
     # Merge and override data
     with data_lock:
@@ -473,8 +498,9 @@ def main():
     # Save sorted data
     save_data(unique_data)
 
-    # Save new checkpoint if run completed successfully
-    if page1_data:
+    # Save new checkpoint only if ALL pages in pages_list were successfully scraped
+    all_success = all(p in successful_pages for p in pages_list)
+    if page1_data and all_success:
         new_checkpoint = page1_data[0]['id']
         if new_checkpoint != LAST_CHECKPOINT_ID:
             logger.info(f"Updating LAST_CHECKPOINT_ID in config.json from {LAST_CHECKPOINT_ID} to {new_checkpoint}")
@@ -484,6 +510,8 @@ def main():
                     json.dump(config, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 logger.error(f"Failed to update LAST_CHECKPOINT_ID in config.json: {str(e)}")
+    else:
+        logger.warning(f"Checkpoint NOT updated because some pages failed to scrape: {[p for p in pages_list if p not in successful_pages]}")
 
 if __name__ == '__main__':
     try:
