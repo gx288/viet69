@@ -30,7 +30,9 @@ jobs:
         cat credentials.json  # Debug
 
     - name: Run script
-      run: python scrape_videos.py
+      run: |
+        python find_and_test_proxies.py
+        python scrape_videos.py
 
     - name: Commit and push data.txt
       run: |
