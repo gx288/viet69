@@ -103,7 +103,8 @@ def main():
     working_proxies = []
     max_workers = 50  # Increase workers slightly to speed up search for multiple proxies
     
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
         futures = {executor.submit(test_proxy, p, target_url): p for p in to_test}
         
         for future in as_completed(futures):
@@ -115,6 +116,9 @@ def main():
                 if len(working_proxies) >= 20:
                     print("[*] Found 20 working proxies. Stopping test.")
                     break
+    finally:
+        # Stop executor immediately without waiting for other threads to finish timeouts
+        executor.shutdown(wait=False, cancel_futures=True)
 
     if working_proxies:
         # Sort by response time
