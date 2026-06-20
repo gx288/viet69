@@ -16,7 +16,7 @@ except ImportError:
     HAS_CURL_CFFI = False
     print("curl_cffi is not installed. To test it, run: pip install curl_cffi")
 
-DOMAINS = ["https://viet69.be", "https://viet69.ke"]
+DOMAINS = ["https://viet69.be", "https://viet69.be/page/2/"]
 
 headers_simple = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
