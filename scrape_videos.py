@@ -1,5 +1,5 @@
 import json
-import requests
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 import threading
 import queue
@@ -71,7 +71,7 @@ def scrape_page(page_num):
         else:
             url = f"{DOMAIN}/page/{page_num}/"
         
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, impersonate="chrome120", timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
