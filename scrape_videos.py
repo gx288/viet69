@@ -500,16 +500,19 @@ def main():
 
     # Save new checkpoint only if ALL pages in pages_list were successfully scraped
     all_success = all(p in successful_pages for p in pages_list)
-    if page1_data and all_success:
-        new_checkpoint = page1_data[0]['id']
-        if new_checkpoint != LAST_CHECKPOINT_ID:
-            logger.info(f"Updating LAST_CHECKPOINT_ID in config.json from {LAST_CHECKPOINT_ID} to {new_checkpoint}")
-            try:
-                config['LAST_CHECKPOINT_ID'] = new_checkpoint
-                with open('config.json', 'w', encoding='utf-8') as f:
-                    json.dump(config, f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                logger.error(f"Failed to update LAST_CHECKPOINT_ID in config.json: {str(e)}")
+    if all_success:
+        if page1_data:
+            new_checkpoint = page1_data[0]['id']
+            if new_checkpoint != LAST_CHECKPOINT_ID:
+                logger.info(f"Updating LAST_CHECKPOINT_ID in config.json from {LAST_CHECKPOINT_ID} to {new_checkpoint}")
+                try:
+                    config['LAST_CHECKPOINT_ID'] = new_checkpoint
+                    with open('config.json', 'w', encoding='utf-8') as f:
+                        json.dump(config, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    logger.error(f"Failed to update LAST_CHECKPOINT_ID in config.json: {str(e)}")
+        else:
+            logger.info("All pages scraped successfully. No new posts to update checkpoint.")
     else:
         logger.warning(f"Checkpoint NOT updated because some pages failed to scrape: {[p for p in pages_list if p not in successful_pages]}")
 
