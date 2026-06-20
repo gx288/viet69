@@ -461,6 +461,9 @@ def main():
     if 1 in pages_list:
         all_video_data.extend(page1_data)
 
+    if ignore_checkpoint:
+        stop_scraping = False
+
     for i in range(0, len(pages_to_process), batch_size):
         if stop_scraping:
             break
