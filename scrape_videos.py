@@ -122,6 +122,7 @@ stop_scraping = False
 total_pages_scraped = 0
 LAST_CHECKPOINT_ID = config.get('LAST_CHECKPOINT_ID')
 checkpoint_hit = False
+ignore_checkpoint = False
 
 def convert_views(views_str):
     """Convert views string (e.g., '128.67K', '1.5M') to integer."""
@@ -164,8 +165,8 @@ def scrape_page(page_num):
                 if not post_id:
                     continue
                 
-                # Checkpoint detection: stop if we reach the last successfully scraped post
-                if LAST_CHECKPOINT_ID and post_id == LAST_CHECKPOINT_ID:
+                # Checkpoint detection: stop if we reach the last successfully scraped post (only in normal mode)
+                if not ignore_checkpoint and LAST_CHECKPOINT_ID and post_id == LAST_CHECKPOINT_ID:
                     global stop_scraping, checkpoint_hit
                     with data_lock:
                         stop_scraping = True
@@ -399,6 +400,17 @@ def main():
     # Database is incomplete if max_existing_page is less than total_pages_on_web
     is_incomplete = max_existing_page < total_pages_on_web
 
+    # Determine gaps/missing pages
+    missing_pages = []
+    if existing_pages:
+        missing_pages = [p for p in range(1, max_existing_page) if p not in existing_pages]
+
+    # Evaluate whether we must ignore checkpoint (in recovery, gap-healing, or force mode)
+    global ignore_checkpoint
+    if is_incomplete or missing_pages or force_full:
+        ignore_checkpoint = True
+        logger.info(f"Checkpoint check DISABLED for this run (Incomplete: {is_incomplete}, Gaps: {len(missing_pages) > 0}, Force: {force_full}).")
+
     if has_new_posts or force_full or is_incomplete:
         if is_incomplete:
             logger.info(f"Database is incomplete ({max_existing_page} < {total_pages_on_web}). Triggering recovery full scrape.")
@@ -414,7 +426,6 @@ def main():
     
     # Gap Detection: Find missing pages in the existing data up to the maximum page recorded
     if existing_pages:
-        missing_pages = [p for p in range(1, max_existing_page) if p not in existing_pages]
         if missing_pages:
             logger.info(f"Gap detection: Found {len(missing_pages)} missing pages in database: {missing_pages[:20]}...")
             for p in missing_pages:
