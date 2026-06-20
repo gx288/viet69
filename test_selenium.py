@@ -4,14 +4,13 @@ import sys
 
 def main():
     options = uc.ChromeOptions()
-    options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     
-    print("Starting undetected-chromedriver...")
+    print("Starting undetected-chromedriver in headful mode...")
     driver = None
     try:
-        driver = uc.Chrome(options=options, version_main=120)  # Or let it auto-detect
+        driver = uc.Chrome(options=options)  # Auto-detect version
         print("Driver started. Loading homepage...")
         driver.get("https://viet69.be")
         
