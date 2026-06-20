@@ -1,8 +1,8 @@
 import sys
 import os
 import json
+import time
 
-# Check dependencies
 try:
     import requests
 except ImportError:
@@ -15,12 +15,6 @@ try:
 except ImportError:
     HAS_CURL_CFFI = False
     print("curl_cffi is not installed. To test it, run: pip install curl_cffi")
-
-DOMAINS = ["https://viet69.be", "https://viet69.be/page/2/"]
-
-headers_simple = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-}
 
 headers_advanced = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -36,7 +30,6 @@ headers_advanced = {
     'Cache-Control': 'max-age=0'
 }
 
-# Try to load proxy from config.json
 proxies = None
 if os.path.exists('config.json'):
     try:
@@ -51,56 +44,60 @@ if os.path.exists('config.json'):
     except:
         pass
 
-def test_url(url, method_name, use_curl=False, headers=None):
-    print(f"\n--- Testing {url} using {method_name} ---")
-    try:
-        if use_curl:
-            if not HAS_CURL_CFFI:
-                print("Skipped: curl_cffi is not installed")
-                return False
-            response = curl_requests.get(url, headers=headers, impersonate="chrome120", timeout=10, proxies=proxies)
-        else:
-            response = requests.get(url, headers=headers, timeout=10, proxies=proxies)
-            
-        print(f"Status Code: {response.status_code}")
-        print(f"Response URL: {response.url}")
-        # Print a snippet of the page if successful
-        if response.status_code == 200:
-            print(f"Success! Content length: {len(response.text)}")
-            snippet = response.text[:300].replace('\n', ' ')
-            # Use sys.stdout.buffer or encode to avoid Windows charmap encoding errors
-            try:
-                print(f"Content snippet: {snippet}...")
-            except UnicodeEncodeError:
-                print(f"Content snippet: {snippet.encode('ascii', errors='ignore').decode('ascii')}...")
-            return True
-        else:
-            print(f"Failed with status: {response.status_code}")
-            if "cloudflare" in response.text.lower() or "cf-ray" in response.headers.get('Server', '').lower() or 'cf-ray' in response.headers:
-                print("Detected Cloudflare protection/cookie challenge in headers/body!")
-            return False
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        return False
+def print_result(response, step_name):
+    print(f"\n--- {step_name} ---")
+    print(f"Status Code: {response.status_code}")
+    print(f"Response URL: {response.url}")
+    if response.status_code == 200:
+        print(f"Success! Content length: {len(response.text)}")
+        snippet = response.text[:300].replace('\n', ' ')
+        try:
+            print(f"Content snippet: {snippet}...")
+        except UnicodeEncodeError:
+            print(f"Content snippet: {snippet.encode('ascii', errors='ignore').decode('ascii')}...")
+    else:
+        print(f"Failed with status: {response.status_code}")
+        if "cloudflare" in response.text.lower() or "cf-ray" in response.headers.get('Server', '').lower() or 'cf-ray' in response.headers:
+            print("Detected Cloudflare protection/cookie challenge in headers/body!")
 
 def main():
     print("==================================================")
-    print("Connection Test Script for Viet69 Scraper")
+    print("Session-based Connection Test for Viet69")
     print("==================================================")
     
-    for domain in DOMAINS:
-        print(f"\n==================================================")
-        print(f"Testing Domain: {domain}")
-        print(f"==================================================")
-        
-        # Test 1: Simple requests (current implementation)
-        test_url(domain, "requests (Simple Headers)", use_curl=False, headers=headers_simple)
-        
-        # Test 2: Advanced headers requests
-        test_url(domain, "requests (Advanced Headers)", use_curl=False, headers=headers_advanced)
-        
-        # Test 3: curl_cffi (mimic Chrome TLS)
-        test_url(domain, "curl_cffi (Impersonating Chrome)", use_curl=True, headers=headers_advanced)
+    if not HAS_CURL_CFFI:
+        print("curl_cffi not installed. Cannot run optimal session test.")
+        return
+
+    # Use a single session to persist cookies, mimicking a real browser session
+    session = curl_requests.Session()
+    session.proxies = proxies
+    
+    # Step 1: Visit homepage first to get Cloudflare session cookies
+    print("\n[Step 1] Visiting homepage to obtain session cookies...")
+    try:
+        res1 = session.get("https://viet69.be", headers=headers_advanced, impersonate="chrome120", timeout=10)
+        print_result(res1, "Homepage Request")
+        print(f"Cookies in Session: {session.cookies.get_dict()}")
+    except Exception as e:
+        print(f"Homepage request failed: {str(e)}")
+        return
+
+    # Wait 3 seconds to look like natural human delay
+    print("\nWaiting 3 seconds before requesting page 2...")
+    time.sleep(3)
+
+    # Step 2: Request Page 2 with Referer pointing to the homepage
+    print("\n[Step 2] Requesting Page 2 with Referer and Cookies...")
+    page2_headers = headers_advanced.copy()
+    page2_headers['Referer'] = 'https://viet69.be/'
+    page2_headers['Sec-Fetch-Site'] = 'same-origin' # Since it's from the same origin now
+    
+    try:
+        res2 = session.get("https://viet69.be/page/2/", headers=page2_headers, impersonate="chrome120", timeout=10)
+        print_result(res2, "Page 2 Request")
+    except Exception as e:
+        print(f"Page 2 request failed: {str(e)}")
 
 if __name__ == '__main__':
     main()
