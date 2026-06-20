@@ -84,8 +84,8 @@ proxy_reload_lock = threading.Lock()
 def reload_proxies():
     global working_proxies
     with proxy_reload_lock:
-        if len(working_proxies) < 3:
-            logger.info("Proxy pool is running low (< 3). Harvesting and testing fresh proxies...")
+        if len(working_proxies) == 0:
+            logger.info("Proxy pool is dry (0). Harvesting and testing fresh proxies...")
             try:
                 result = subprocess.run([sys.executable, "-u", "find_and_test_proxies.py"], check=True)
                 if result.returncode == 0:
@@ -102,7 +102,7 @@ def reload_proxies():
 
 def requests_get_with_retry(url, max_retries=5):
     global working_proxies
-    if len(working_proxies) < 3:
+    if len(working_proxies) == 0:
         reload_proxies()
     for attempt in range(max_retries):
         proxy_url = None
