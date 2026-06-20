@@ -39,15 +39,16 @@ jobs:
       env:
         FORCE_FULL_SCRAPE: ${{ github.event.inputs.force_full }}
       run: |
-        python find_and_test_proxies.py
-        python scrape_videos.py
+        python -u find_and_test_proxies.py
+        python -u scrape_videos.py
 
     - name: Commit and push data.txt
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add data.txt
+        git add data.txt config.json
         git commit -m "Daily update: data.txt $(date +%Y-%m-%d)" || echo "No changes"
+        git pull --rebase
         git push
 
     - name: Upload temp CSV as artifact

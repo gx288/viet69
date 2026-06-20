@@ -120,6 +120,8 @@ all_video_data = []
 data_lock = threading.Lock()
 stop_scraping = False
 total_pages_scraped = 0
+LAST_CHECKPOINT_ID = config.get('LAST_CHECKPOINT_ID')
+checkpoint_hit = False
 
 def convert_views(views_str):
     """Convert views string (e.g., '128.67K', '1.5M') to integer."""
@@ -161,6 +163,15 @@ def scrape_page(page_num):
                 post_id = next((c.replace('post-', '') for c in classes if c.startswith('post-')), None)
                 if not post_id:
                     continue
+                
+                # Checkpoint detection: stop if we reach the last successfully scraped post
+                if LAST_CHECKPOINT_ID and post_id == LAST_CHECKPOINT_ID:
+                    global stop_scraping, checkpoint_hit
+                    with data_lock:
+                        stop_scraping = True
+                        checkpoint_hit = True
+                    logger.info(f"Reached last successful checkpoint ID: {LAST_CHECKPOINT_ID}. Stopping scrape.")
+                    break
                 
                 title_elem = item.find('h2', class_='entry-title')
                 title = title_elem.find('a').text if title_elem and title_elem.find('a') else ''
@@ -445,6 +456,18 @@ def main():
 
     # Save sorted data
     save_data(unique_data)
+
+    # Save new checkpoint if run completed successfully
+    if page1_data:
+        new_checkpoint = page1_data[0]['id']
+        if new_checkpoint != LAST_CHECKPOINT_ID:
+            logger.info(f"Updating LAST_CHECKPOINT_ID in config.json from {LAST_CHECKPOINT_ID} to {new_checkpoint}")
+            try:
+                config['LAST_CHECKPOINT_ID'] = new_checkpoint
+                with open('config.json', 'w', encoding='utf-8') as f:
+                    json.dump(config, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Failed to update LAST_CHECKPOINT_ID in config.json: {str(e)}")
 
 if __name__ == '__main__':
     try:

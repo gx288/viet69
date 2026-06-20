@@ -22,5 +22,5 @@ jobs:
 
     - name: Run connection test
       run: |
-        python find_and_test_proxies.py
-        python test_connection.py
+        python -u find_and_test_proxies.py
+        python -u test_connection.py
