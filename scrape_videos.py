@@ -412,49 +412,28 @@ def main():
     total_pages_on_web = get_total_pages(soup)
     logger.info(f"Total pages on website: {total_pages_on_web}")
 
-    # Determine maximum page currently in database
-    existing_pages = {int(item['page']) for item in existing_data if 'page' in item}
-    max_existing_page = max(existing_pages) if existing_pages else 0
-    logger.info(f"Max page in database: {max_existing_page}")
-
     # Check for FORCE_FULL_SCRAPE environment variable
     force_full = os.environ.get("FORCE_FULL_SCRAPE", "false").lower() == "true"
 
-    # Database is incomplete if max_existing_page is less than total_pages_on_web
-    is_incomplete = max_existing_page < total_pages_on_web
-
-    # Determine gaps/missing pages
-    missing_pages = []
-    if existing_pages:
-        missing_pages = [p for p in range(1, max_existing_page) if p not in existing_pages]
-
-    # Evaluate whether we must ignore checkpoint (in recovery, gap-healing, or force mode)
     global ignore_checkpoint
-    if is_incomplete or missing_pages or force_full:
+    if force_full or not LAST_CHECKPOINT_ID:
+        # Full scan mode: scan all pages and disable checkpoint early stop
         ignore_checkpoint = True
-        logger.info(f"Checkpoint check DISABLED for this run (Incomplete: {is_incomplete}, Gaps: {len(missing_pages) > 0}, Force: {force_full}).")
-
-    if has_new_posts or force_full or is_incomplete:
-        if is_incomplete:
-            logger.info(f"Database is incomplete ({max_existing_page} < {total_pages_on_web}). Triggering recovery full scrape.")
-        else:
-            logger.info("New posts found or force full enabled. Scraping all pages.")
+        logger.info(f"Full scrape mode enabled (Force: {force_full}, No Checkpoint: {not LAST_CHECKPOINT_ID}).")
+        pages_to_scrape = total_pages_on_web
+    elif has_new_posts:
+        # Incremental scan mode: scan up to all pages, but check checkpoint to stop early
+        ignore_checkpoint = False
+        logger.info("New posts found on page 1. Incremental scrape enabled (will stop at checkpoint).")
         pages_to_scrape = total_pages_on_web
     else:
-        logger.info(f"No new posts on page 1. Scraping first {LIMIT_PAGES_NO_NEW} pages for stats update.")
+        # Stats update mode: scan first 10 pages, ignore checkpoint so it doesn't stop on page 1
+        ignore_checkpoint = True
+        logger.info(f"No new posts. Scanning first {LIMIT_PAGES_NO_NEW} pages for stats update.")
         pages_to_scrape = LIMIT_PAGES_NO_NEW
 
-    # Determine initial list of pages to scrape
+    # Determine list of pages to scrape
     pages_list = list(range(1, pages_to_scrape + 1))
-    
-    # Gap Detection: Find missing pages in the existing data up to the maximum page recorded
-    if existing_pages:
-        if missing_pages:
-            logger.info(f"Gap detection: Found {len(missing_pages)} missing pages in database: {missing_pages[:20]}...")
-            for p in missing_pages:
-                if p not in pages_list:
-                    pages_list.append(p)
-            pages_list.sort()
 
     # Now scrape the determined pages in batches
     pages_to_process = [p for p in pages_list if p != 1]
