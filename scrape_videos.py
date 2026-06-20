@@ -8,7 +8,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import os
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import logging
 
 # Set up logging
@@ -216,9 +216,70 @@ def process_batch(start_page, end_page):
     for t in threads:
         t.join()
 
+def update_domain_everywhere(old_host, new_host):
+    logger.info(f"Updating domain on all fronts from {old_host} to {new_host}...")
+    if os.path.exists(DATA_TXT):
+        try:
+            logger.info(f"Updating {DATA_TXT}...")
+            with open(DATA_TXT, 'r', encoding='utf-8') as f:
+                content = f.read()
+            updated_content = content.replace(old_host, new_host)
+            with open(DATA_TXT, 'w', encoding='utf-8') as f:
+                f.write(updated_content)
+            logger.info(f"Successfully updated {DATA_TXT}")
+        except Exception as e:
+            logger.error(f"Failed to update {DATA_TXT}: {str(e)}")
+
+def check_domain_redirect():
+    global DOMAIN
+    parsed_current = urlparse(DOMAIN)
+    current_base = f"{parsed_current.scheme}://{parsed_current.netloc}"
+    
+    redirect_targets = []
+    logger.info(f"Checking for domain redirects on {DOMAIN}...")
+    
+    for i in range(3):
+        try:
+            response = requests.get(DOMAIN, headers=headers, impersonate="chrome120", timeout=10)
+            if response.status_code == 200:
+                parsed_final = urlparse(response.url)
+                final_base = f"{parsed_final.scheme}://{parsed_final.netloc}"
+                redirect_targets.append(final_base)
+            else:
+                redirect_targets.append(None)
+        except Exception as e:
+            logger.error(f"Redirect check {i+1} failed: {str(e)}")
+            redirect_targets.append(None)
+        time.sleep(1)
+        
+    # If all 3 succeeded and redirected to the same new domain
+    if len(redirect_targets) == 3 and all(x is not None for x in redirect_targets):
+        unique_targets = set(redirect_targets)
+        if len(unique_targets) == 1:
+            new_domain = list(unique_targets)[0]
+            if new_domain.rstrip('/') != current_base.rstrip('/'):
+                parsed_new = urlparse(new_domain)
+                old_host = parsed_current.netloc
+                new_host = parsed_new.netloc
+                logger.info(f"Domain redirect detected consistently: {DOMAIN} -> {new_domain}. Updating config.json.")
+                # Update DOMAIN global variable
+                DOMAIN = new_domain
+                # Write back to config.json
+                try:
+                    config['DOMAIN'] = new_domain
+                    with open('config.json', 'w', encoding='utf-8') as f:
+                        json.dump(config, f, ensure_ascii=False, indent=2)
+                    logger.info(f"Successfully updated config.json with new domain: {new_domain}")
+                except Exception as e:
+                    logger.error(f"Failed to update config.json: {str(e)}")
+                
+                # Update data.txt
+                update_domain_everywhere(old_host, new_host)
+
 def main():
     global all_video_data, stop_scraping
     logger.info("Starting scraper")
+    check_domain_redirect()
     existing_data = load_existing_data()
     existing_dict = {item['id']: item for item in existing_data}  # Use dict for quick lookup and override
 
