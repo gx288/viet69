@@ -12,6 +12,8 @@ from urllib.parse import urljoin, urlparse
 import logging
 import random
 import re
+import subprocess
+import sys
 
 def get_total_pages(soup):
     if not soup:
@@ -77,8 +79,31 @@ if os.path.exists("working_proxies.txt"):
     except Exception as e:
         logger.error(f"Failed to load working_proxies.txt: {e}")
 
+proxy_reload_lock = threading.Lock()
+
+def reload_proxies():
+    global working_proxies
+    with proxy_reload_lock:
+        if len(working_proxies) < 3:
+            logger.info("Proxy pool is running low (< 3). Harvesting and testing fresh proxies...")
+            try:
+                result = subprocess.run([sys.executable, "-u", "find_and_test_proxies.py"], check=True)
+                if result.returncode == 0:
+                    if os.path.exists("working_proxies.txt"):
+                        with open("working_proxies.txt", "r", encoding="utf-8") as f:
+                            new_proxies = [line.strip() for line in f if line.strip()]
+                        if new_proxies:
+                            working_proxies = new_proxies
+                            logger.info(f"Successfully reloaded proxy pool with {len(working_proxies)} fresh proxies.")
+                            return
+                logger.error("Failed to harvest fresh proxies. subprocess returned non-zero.")
+            except Exception as e:
+                logger.error(f"Error harvesting fresh proxies: {e}")
+
 def requests_get_with_retry(url, max_retries=5):
     global working_proxies
+    if len(working_proxies) < 3:
+        reload_proxies()
     for attempt in range(max_retries):
         proxy_url = None
         proxies_config = None
