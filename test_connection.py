@@ -36,6 +36,21 @@ headers_advanced = {
     'Cache-Control': 'max-age=0'
 }
 
+# Try to load proxy from config.json
+proxies = None
+if os.path.exists('config.json'):
+    try:
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+            if config.get('PROXY'):
+                proxies = {
+                    'http': config['PROXY'],
+                    'https': config['PROXY']
+                }
+                print(f"Loaded proxy from config: {config['PROXY']}")
+    except:
+        pass
+
 def test_url(url, method_name, use_curl=False, headers=None):
     print(f"\n--- Testing {url} using {method_name} ---")
     try:
@@ -43,9 +58,9 @@ def test_url(url, method_name, use_curl=False, headers=None):
             if not HAS_CURL_CFFI:
                 print("Skipped: curl_cffi is not installed")
                 return False
-            response = curl_requests.get(url, headers=headers, impersonate="chrome120", timeout=10)
+            response = curl_requests.get(url, headers=headers, impersonate="chrome120", timeout=10, proxies=proxies)
         else:
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=10, proxies=proxies)
             
         print(f"Status Code: {response.status_code}")
         print(f"Response URL: {response.url}")

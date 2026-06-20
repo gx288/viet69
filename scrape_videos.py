@@ -43,6 +43,14 @@ SHEET_ID = config['SHEET_ID']
 # Headers for requests
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
+# Proxies configuration
+proxies = None
+if config.get('PROXY'):
+    proxies = {
+        'http': config['PROXY'],
+        'https': config['PROXY']
+    }
+
 # Thread-safe queue and lock
 page_queue = queue.Queue()
 all_video_data = []
@@ -71,7 +79,7 @@ def scrape_page(page_num):
         else:
             url = f"{DOMAIN}/page/{page_num}/"
         
-        response = requests.get(url, headers=headers, impersonate="chrome120", timeout=10)
+        response = requests.get(url, headers=headers, impersonate="chrome120", timeout=10, proxies=proxies)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -240,7 +248,7 @@ def check_domain_redirect():
     
     for i in range(3):
         try:
-            response = requests.get(DOMAIN, headers=headers, impersonate="chrome120", timeout=10)
+            response = requests.get(DOMAIN, headers=headers, impersonate="chrome120", timeout=10, proxies=proxies)
             if response.status_code == 200:
                 parsed_final = urlparse(response.url)
                 final_base = f"{parsed_final.scheme}://{parsed_final.netloc}"
