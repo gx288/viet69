@@ -138,7 +138,7 @@ def convert_views(views_str):
 
 def scrape_page(page_num):
     """Scrape data from a single page."""
-    global total_pages_scraped
+    global total_pages_scraped, stop_scraping, checkpoint_hit
     try:
         if page_num == 1:
             url = DOMAIN
@@ -151,7 +151,6 @@ def scrape_page(page_num):
         
         items = soup.find_all('div', class_='item-video')
         if not items:
-            global stop_scraping
             with data_lock:
                 stop_scraping = True
                 logger.info(f"Last page: {page_num}, found 0 items")
@@ -167,7 +166,6 @@ def scrape_page(page_num):
                 
                 # Checkpoint detection: stop if we reach the last successfully scraped post (only in normal mode)
                 if not ignore_checkpoint and LAST_CHECKPOINT_ID and post_id == LAST_CHECKPOINT_ID:
-                    global stop_scraping, checkpoint_hit
                     with data_lock:
                         stop_scraping = True
                         checkpoint_hit = True
