@@ -26,6 +26,9 @@ PROXY_SOURCES = [
     "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt",
     "https://raw.githubusercontent.com/MuRongPIG/Proxy-Master/main/socks5.txt",
     "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks5/data.txt",
+    "https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/socks5/socks5.txt",
+    "https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/socks5.txt",
+    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt",
     # HTTP sources
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
@@ -37,7 +40,10 @@ PROXY_SOURCES = [
     "https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/HTTP.txt",
     "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt",
     "https://raw.githubusercontent.com/MuRongPIG/Proxy-Master/main/http.txt",
-    "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt"
+    "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt",
+    "https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/http/http.txt",
+    "https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/http.txt",
+    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt"
 ]
 
 headers = {
@@ -110,13 +116,13 @@ def main():
 
     random.shuffle(candidates)
     
-    # We test up to 1000 random candidates to find multiple working ones
-    test_limit = min(1000, len(candidates))
+    # We test up to 3000 random candidates to find multiple working ones quickly
+    test_limit = min(3000, len(candidates))
     to_test = candidates[:test_limit]
     print(f"[*] Testing up to {test_limit} random candidates...")
 
     working_proxies = []
-    max_workers = 50  # Increase workers slightly to speed up search for multiple proxies
+    max_workers = 150  # Increase workers significantly to speed up testing in batch
     
     executor = ThreadPoolExecutor(max_workers=max_workers)
     try:
@@ -127,9 +133,9 @@ def main():
             if res:
                 working_proxies.append(res)
                 print(f"    [+] Working: {res[0]} (Time: {res[1]:.2f}s)")
-                # Stop early if we find 20 working proxies
-                if len(working_proxies) >= 20:
-                    print("[*] Found 20 working proxies. Stopping test.")
+                # Stop early if we find 30 working proxies
+                if len(working_proxies) >= 30:
+                    print("[*] Found 30 working proxies. Stopping test.")
                     break
     finally:
         # Stop executor immediately without waiting for other threads to finish timeouts
