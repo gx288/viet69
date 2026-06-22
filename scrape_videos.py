@@ -111,6 +111,8 @@ def requests_get_with_retry(url, max_retries=5):
         # Thread-safe check of pool size in case another thread cleared it or triggered a reload
         if len(working_proxies) < 3:
             reload_proxies()
+            
+        if working_proxies:
             proxy_url = random.choice(working_proxies)
             proxies_config = {
                 'http': proxy_url,
