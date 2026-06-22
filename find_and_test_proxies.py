@@ -73,7 +73,7 @@ def test_proxy(proxy_url, target_url):
             headers=headers, 
             impersonate="chrome120", 
             proxies=proxies, 
-            timeout=8
+            timeout=15
         )
         if r.status_code == 200 and "viet69" in r.text.lower():
             elapsed = time.time() - start_time

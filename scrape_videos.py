@@ -120,7 +120,7 @@ def requests_get_with_retry(url, max_retries=20):
             }
             
         try:
-            response = requests.get(url, headers=headers, impersonate="chrome120", timeout=10, proxies=proxies_config)
+            response = requests.get(url, headers=headers, impersonate="chrome120", timeout=20, proxies=proxies_config)
             if response.status_code == 200:
                 return response
             elif response.status_code == 403:
@@ -138,7 +138,7 @@ def requests_get_with_retry(url, max_retries=20):
                     logger.info(f"Removed dead proxy: {proxy_url}. Remaining active proxies: {len(working_proxies)}")
                     
         # Sleep briefly
-        time.sleep(0.5)
+        time.sleep(0.1)
         
     # If we get here, all retries failed. Attempt one last direct request as fallback.
     logger.info("All proxy retries failed. Attempting final request without proxy...")
