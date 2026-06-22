@@ -100,7 +100,7 @@ def reload_proxies():
             except Exception as e:
                 logger.error(f"Error harvesting fresh proxies: {e}")
 
-def requests_get_with_retry(url, max_retries=5):
+def requests_get_with_retry(url, max_retries=20):
     global working_proxies
     if len(working_proxies) < 5:
         reload_proxies()
@@ -137,7 +137,8 @@ def requests_get_with_retry(url, max_retries=5):
                     working_proxies.remove(proxy_url)
                     logger.info(f"Removed dead proxy: {proxy_url}. Remaining active proxies: {len(working_proxies)}")
                     
-        time.sleep(1)
+        # Sleep briefly
+        time.sleep(0.5)
         
     # If we get here, all retries failed. Attempt one last direct request as fallback.
     logger.info("All proxy retries failed. Attempting final request without proxy...")
