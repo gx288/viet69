@@ -445,8 +445,6 @@ def main():
 
     # Now scrape the determined pages in batches
     pages_to_process = [p for p in pages_list if p != 1]
-    # Now scrape the determined pages in batches with retry for failed pages
-    pages_to_process = [p for p in pages_list if p != 1]
     if 1 in pages_list:
         all_video_data.extend(page1_data)
         successful_pages.add(1)
@@ -454,6 +452,10 @@ def main():
     max_retry_rounds = 5
     for round_num in range(1, max_retry_rounds + 1):
         if not pages_to_process:
+            break
+            
+        if checkpoint_hit:
+            logger.info("Checkpoint was hit. Skipping further retry rounds.")
             break
             
         if ignore_checkpoint:
@@ -480,7 +482,14 @@ def main():
             for t in threads:
                 t.join()
                 
-        # Calculate failed pages in this round
+        if checkpoint_hit:
+            # If checkpoint was hit, we only care about successful pages up to the maximum successful page
+            max_scraped_page = max(successful_pages) if successful_pages else 1
+            logger.info(f"Checkpoint hit. Truncating target pages list to page 1 to {max_scraped_page}.")
+            # Redefine pages_list to only include pages we actually intended to scrape before hitting checkpoint
+            pages_list = list(range(1, max_scraped_page + 1))
+            
+        # Calculate failed pages in this round within the active pages_list
         failed_pages = [p for p in pages_list if p not in successful_pages]
         if failed_pages:
             logger.warning(f"Round {round_num} finished with {len(failed_pages)} failed pages: {failed_pages[:20]}...")
@@ -488,7 +497,7 @@ def main():
             # Sleep briefly between retry rounds
             time.sleep(2)
         else:
-            logger.info("All pages scraped successfully!")
+            logger.info("All active pages scraped successfully!")
             pages_to_process = []
             break
 
@@ -503,9 +512,26 @@ def main():
     # Save sorted data
     save_data(unique_data)
 
-    # Save new checkpoint only if ALL pages in pages_list were successfully scraped
+    # Perform a broad database size check to prevent massive data loss
+    # Each page on this website has exactly 21 items.
+    items_per_page = 21
+    expected_total_items = total_pages_on_web * items_per_page
+    actual_total_items = len(unique_data)
+    
+    # We allow a slight variance (e.g. 5%) because of dynamic additions, pin posts, or empty pages at the end
+    tolerance_threshold = 0.85 # Must be at least 85% of expected items to be considered healthy
+    is_database_healthy = True
+    
+    if expected_total_items > 0:
+        fill_rate = actual_total_items / expected_total_items
+        logger.info(f"Database health check: items count is {actual_total_items}, expected ~{expected_total_items} (Fill rate: {fill_rate:.2%})")
+        if fill_rate < tolerance_threshold:
+            logger.warning(f"Database count is suspiciously low! Fill rate: {fill_rate:.2%} is below threshold {tolerance_threshold:.2%}. Checkpoint update disabled.")
+            is_database_healthy = False
+
+    # Save new checkpoint only if ALL active pages were successfully scraped and database is healthy
     all_success = all(p in successful_pages for p in pages_list)
-    if all_success:
+    if all_success and is_database_healthy:
         if page1_data:
             new_checkpoint = page1_data[0]['id']
             if new_checkpoint != LAST_CHECKPOINT_ID:
@@ -519,7 +545,10 @@ def main():
         else:
             logger.info("All pages scraped successfully. No new posts to update checkpoint.")
     else:
-        logger.warning(f"Checkpoint NOT updated because some pages failed to scrape: {[p for p in pages_list if p not in successful_pages]}")
+        if not is_database_healthy:
+            logger.warning("Checkpoint NOT updated because database size check failed (data is suspiciously incomplete).")
+        else:
+            logger.warning(f"Checkpoint NOT updated because some active pages failed to scrape: {[p for p in pages_list if p not in successful_pages]}")
 
 if __name__ == '__main__':
     try:
