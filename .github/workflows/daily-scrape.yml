@@ -3,7 +3,7 @@ name: Daily Video Scrape
 on:
   schedule:
     - cron: '0 * * * *'      # Runs every hour (Hourly Incremental Scrape)
-    - cron: '0 0 * * 0'      # Runs at 00:00 every Sunday (Weekly Full Scrape)
+    - cron: '25 4 * * 0'     # Runs at 04:25 AM every Sunday (Weekly Full Scrape - Off-peak)
   workflow_dispatch:
     inputs:
       force_full:
@@ -38,7 +38,7 @@ jobs:
 
     - name: Run script
       env:
-        FORCE_FULL_SCRAPE: ${{ github.event.inputs.force_full || (github.event.schedule == '0 0 * * 0') }}
+        FORCE_FULL_SCRAPE: ${{ github.event.inputs.force_full || (github.event.schedule == '25 4 * * 0') }}
       run: |
         python -u find_and_test_proxies.py
         python -u scrape_videos.py
