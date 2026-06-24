@@ -197,11 +197,13 @@ def scrape_page(page_num):
                     continue
                 
                 # Checkpoint detection: stop if we reach the last successfully scraped post (only in normal mode)
-                if not ignore_checkpoint and LAST_CHECKPOINT_ID and post_id == LAST_CHECKPOINT_ID:
+                # We always bypass checkpoint for the first 10 pages to ensure stats (views/likes) are updated for recent posts
+                is_within_stats_scope = (page_num <= 10)
+                if not ignore_checkpoint and not is_within_stats_scope and LAST_CHECKPOINT_ID and post_id == LAST_CHECKPOINT_ID:
                     with data_lock:
                         stop_scraping = True
                         checkpoint_hit = True
-                    logger.info(f"Reached last successful checkpoint ID: {LAST_CHECKPOINT_ID}. Stopping scrape.")
+                    logger.info(f"Reached last successful checkpoint ID: {LAST_CHECKPOINT_ID} on page {page_num}. Stopping scrape.")
                     break
                 
                 title_elem = item.find('h2', class_='entry-title')
@@ -426,15 +428,6 @@ def main():
             if item['id'] == LAST_CHECKPOINT_ID:
                 is_checkpoint_on_page1 = True
                 break
-                
-    # If checkpoint was hit right on page 1 or found in page 1 data, mark checkpoint_hit = True
-    if checkpoint_hit or is_checkpoint_on_page1:
-        logger.info(f"Checkpoint {LAST_CHECKPOINT_ID} found on page 1. Restricting scrape scope to page 1.")
-        checkpoint_hit = True
-        stop_scraping = True
-    else:
-        checkpoint_hit = False
-        stop_scraping = False
 
     has_new_posts = False
     for item in page1_data:
@@ -449,26 +442,24 @@ def main():
     # Check for FORCE_FULL_SCRAPE environment variable
     force_full = os.environ.get("FORCE_FULL_SCRAPE", "false").lower() == "true"
 
-    if checkpoint_hit:
-        # If we hit checkpoint immediately on page 1, we only want to process page 1
-        ignore_checkpoint = False
-        logger.info("Checkpoint hit on page 1. Restricting scrape scope to page 1 only.")
-        pages_to_scrape = 1
-    elif force_full or not LAST_CHECKPOINT_ID:
+    # Reset checkpoint variables for the main scraping flow
+    checkpoint_hit = False
+    stop_scraping = False
+
+    if force_full or not LAST_CHECKPOINT_ID:
         # Full scan mode: scan all pages and disable checkpoint early stop
         ignore_checkpoint = True
         logger.info(f"Full scrape mode enabled (Force: {force_full}, No Checkpoint: {not LAST_CHECKPOINT_ID}).")
         pages_to_scrape = total_pages_on_web
-    elif has_new_posts:
-        # Incremental scan mode: scan up to all pages, but check checkpoint to stop early
-        ignore_checkpoint = False
-        logger.info("New posts found on page 1. Incremental scrape enabled (will stop at checkpoint).")
-        pages_to_scrape = total_pages_on_web
     else:
-        # Stats update mode: scan first 10 pages, ignore checkpoint so it doesn't stop on page 1
-        ignore_checkpoint = True
-        logger.info(f"No new posts. Scanning first {LIMIT_PAGES_NO_NEW} pages for stats update.")
-        pages_to_scrape = LIMIT_PAGES_NO_NEW
+        # Normal & stats mode: We ALWAYS scrape at least 10 pages to update views/likes on recent posts.
+        # Starting from page 11, it will check and stop if checkpoint is hit.
+        ignore_checkpoint = False
+        pages_to_scrape = max(LIMIT_PAGES_NO_NEW, total_pages_on_web if has_new_posts else LIMIT_PAGES_NO_NEW)
+        if has_new_posts:
+            logger.info(f"New posts found. Scrape scope set to {pages_to_scrape} pages (Minimum 10 pages for stats update).")
+        else:
+            logger.info(f"No new posts. Scanning first {LIMIT_PAGES_NO_NEW} pages for stats update.")
 
     # Determine list of pages to scrape
     pages_list = list(range(1, pages_to_scrape + 1))
