@@ -418,8 +418,15 @@ def main():
     
     # Restore original checkpoint state
     ignore_checkpoint = original_ignore_checkpoint
-    checkpoint_hit = False
-    stop_scraping = False
+    
+    # If checkpoint was hit right on page 1, mark checkpoint_hit = True and keep stop_scraping
+    if checkpoint_hit:
+        logger.info("Checkpoint hit immediately on page 1. No new posts to fetch.")
+        # Prevent any further scraping or incorrect warning logs
+        stop_scraping = True
+    else:
+        checkpoint_hit = False
+        stop_scraping = False
 
     has_new_posts = False
     for item in page1_data:
@@ -434,7 +441,12 @@ def main():
     # Check for FORCE_FULL_SCRAPE environment variable
     force_full = os.environ.get("FORCE_FULL_SCRAPE", "false").lower() == "true"
 
-    if force_full or not LAST_CHECKPOINT_ID:
+    if checkpoint_hit:
+        # If we hit checkpoint immediately on page 1, we only want to process page 1
+        ignore_checkpoint = False
+        logger.info("Checkpoint hit on page 1. Restricting scrape scope to page 1 only.")
+        pages_to_scrape = 1
+    elif force_full or not LAST_CHECKPOINT_ID:
         # Full scan mode: scan all pages and disable checkpoint early stop
         ignore_checkpoint = True
         logger.info(f"Full scrape mode enabled (Force: {force_full}, No Checkpoint: {not LAST_CHECKPOINT_ID}).")

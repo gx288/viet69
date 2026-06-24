@@ -1,0 +1,63 @@
+name: Anhmoe Video Scraper
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'  # mỗi 3 tiếng
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: 'Số trang muốn scrape (hoặc "all" để lấy hết)'
+        required: false
+        default: 'all'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium gspread google-auth google-auth-oauthlib oauth2client
+
+
+
+      - name: Run scraper
+        env:
+          # Cần khai báo đủ các Secret ở đây để Python os.getenv đọc được
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          ZPIC_COOKIES_BASE64: ${{ secrets.ZPIC_COOKIES_BASE64 }}
+          ZPIC_USERNAME: ${{ secrets.ZPIC_USERNAME }}
+          ZPIC_PASSWORD: ${{ secrets.ZPIC_PASSWORD }}
+        run: |
+          # Giữ nguyên logic cũ của bạn
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.pages }}" ] && [ "${{ github.event.inputs.pages }}" != "all" ]; then
+            python -u anhmoe/scraper.py "${{ github.event.inputs.pages }}"
+          else
+            python -u anhmoe/scraper.py all
+          fi
+
+      - name: Commit and push videos_data.json (if changed)
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add anhmoe/videos_data.json anhmoe/config.json || true
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update scraper data/config - $(date +'%Y-%m-%d %H:%M')"
+            git pull --rebase origin ${{ github.ref_name }} || { git rebase --abort; git pull origin ${{ github.ref_name }} --no-edit; }
+            git push origin HEAD:${{ github.ref_name }}
+          fi
