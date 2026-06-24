@@ -393,7 +393,7 @@ def check_domain_redirect():
                 update_domain_everywhere(old_host, new_host)
 
 def main():
-    global all_video_data, stop_scraping
+    global all_video_data, stop_scraping, ignore_checkpoint, checkpoint_hit
     logger.info("Starting scraper")
     check_domain_redirect()
     existing_data = load_existing_data()
@@ -402,13 +402,24 @@ def main():
     max_pages = 1000
     batch_size = 10  # Set batch size to 10 pages
 
-    # First, scrape page 1 to check for new posts
+    # First, scrape page 1 to check for new posts. Always ignore checkpoint during this initial check
     logger.info("Scraping page 1 to check for new posts")
     all_video_data = []  # Reset for page 1
     stop_scraping = False
+    checkpoint_hit = False
+    
+    # Backup current state and force ignore checkpoint for page 1
+    original_ignore_checkpoint = ignore_checkpoint
+    ignore_checkpoint = True
+    
     soup = scrape_page(1)  # Scrape page 1 synchronously and get soup
     page1_data = all_video_data[:]
     all_video_data = []  # Reset for further scraping
+    
+    # Restore original checkpoint state
+    ignore_checkpoint = original_ignore_checkpoint
+    checkpoint_hit = False
+    stop_scraping = False
 
     has_new_posts = False
     for item in page1_data:
