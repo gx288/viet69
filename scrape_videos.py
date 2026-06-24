@@ -434,7 +434,6 @@ def main():
     # Check for FORCE_FULL_SCRAPE environment variable
     force_full = os.environ.get("FORCE_FULL_SCRAPE", "false").lower() == "true"
 
-    global ignore_checkpoint
     if force_full or not LAST_CHECKPOINT_ID:
         # Full scan mode: scan all pages and disable checkpoint early stop
         ignore_checkpoint = True
