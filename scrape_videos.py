@@ -419,10 +419,18 @@ def main():
     # Restore original checkpoint state
     ignore_checkpoint = original_ignore_checkpoint
     
-    # If checkpoint was hit right on page 1, mark checkpoint_hit = True and keep stop_scraping
-    if checkpoint_hit:
-        logger.info("Checkpoint hit immediately on page 1. No new posts to fetch.")
-        # Prevent any further scraping or incorrect warning logs
+    # Check if the checkpoint ID exists in the newly scraped page 1 data
+    is_checkpoint_on_page1 = False
+    if LAST_CHECKPOINT_ID:
+        for item in page1_data:
+            if item['id'] == LAST_CHECKPOINT_ID:
+                is_checkpoint_on_page1 = True
+                break
+                
+    # If checkpoint was hit right on page 1 or found in page 1 data, mark checkpoint_hit = True
+    if checkpoint_hit or is_checkpoint_on_page1:
+        logger.info(f"Checkpoint {LAST_CHECKPOINT_ID} found on page 1. Restricting scrape scope to page 1.")
+        checkpoint_hit = True
         stop_scraping = True
     else:
         checkpoint_hit = False
