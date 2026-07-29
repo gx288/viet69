@@ -11,6 +11,6 @@
   ],
   "CREDENTIALS_FILE": "credentials.json",
   "SHEET_ID": "1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU",
-  "PROXY": "http://140.238.32.108:3128",
+  "PROXY": "http://154.203.132.81:1080",
   "LAST_CHECKPOINT_ID": "79791"
 }
