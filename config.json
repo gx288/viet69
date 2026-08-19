@@ -1,5 +1,5 @@
 {
-  "DOMAIN": "https://viet69.nz",
+  "DOMAIN": "https://viet69.be",
   "NUM_THREADS": 20,
   "LIMIT_PAGES_NO_NEW": 10,
   "DETAIL_DELAY": 1,
@@ -11,6 +11,6 @@
   ],
   "CREDENTIALS_FILE": "credentials.json",
   "SHEET_ID": "1RWAd7HrgnzfRK9PpD5Zy7OHwMv6mfQh17jvqNWGHsaU",
-  "PROXY": "http://204.76.203.9:8080",
+  "PROXY": "socks5://3.128.83.74:17000",
   "LAST_CHECKPOINT_ID": "80270"
 }
