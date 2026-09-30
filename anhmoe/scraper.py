@@ -129,7 +129,7 @@ def append_or_update_json(new_rows):
 # MAIN SCRAPE FUNCTION
 # ────────────────────────────────────────────────
 
-def scrape_pages(max_pages=None):
+def scrape_pages(max_pages=None, early_stop=True):
     sheet = get_or_create_sheet()
     existing_video_ids, _ = load_sheet_video_urls(sheet)
 
@@ -234,8 +234,8 @@ def scrape_pages(max_pages=None):
 
                 if vid_id in existing_video_ids:
                     consecutive_duplicates += 1
-                    if consecutive_duplicates > 7:
-                        print("⏩ Gặp 7 video cũ liên tiếp trên trang. Dừng cào sớm.")
+                    if early_stop and consecutive_duplicates > 7:
+                        print("⏩ Gặp 7 video cũ liên tiếp trên trang. Dừng cào sớm (Chế độ tự động).")
                         break
                     continue
 
@@ -268,8 +268,8 @@ def scrape_pages(max_pages=None):
         if page_new_rows:
             all_new_rows_this_run.extend(page_new_rows)
 
-        if consecutive_duplicates > 7:
-            print("⏩ Phát hiện nhiều video cũ liên tiếp. Dừng sớm.")
+        if early_stop and consecutive_duplicates > 7:
+            print("⏩ Phát hiện nhiều video cũ liên tiếp. Dừng cào sớm.")
             break
 
         if max_pages and page_number >= max_pages: break
@@ -295,9 +295,24 @@ def scrape_pages(max_pages=None):
 
 if __name__ == '__main__':
     max_p = None
+    early_stop_flag = True
+
     if len(sys.argv) > 1:
-        val = sys.argv[1].lower()
-        if val not in ('all', 'tất cả'):
-            try: max_p = int(val)
-            except: pass
-    scrape_pages(max_p)
+        val = sys.argv[1].strip().lower()
+        if val in ('all', 'tất cả'):
+            max_p = None
+            early_stop_flag = False  # Chạy All: cào toàn bộ, KHÔNG tự động dừng
+            print("⚡ Chế độ: Cào toàn bộ (All) - ĐÃ TẮT tự động dừng, cào hết các trang.")
+        elif val in ('cron', 'auto', 'schedule'):
+            max_p = None
+            early_stop_flag = True   # Chạy tự động: dừng sớm khi gặp 7 video cũ
+            print("⚡ Chế độ: Chạy tự động (Cron) - BẬT tự động dừng sớm khi gặp video cũ.")
+        else:
+            try:
+                max_p = int(val)
+                early_stop_flag = False  # Chỉ định số trang cụ thể
+                print(f"⚡ Chế độ: Cào chỉ định {max_p} trang.")
+            except:
+                pass
+
+    scrape_pages(max_pages=max_p, early_stop=early_stop_flag)
