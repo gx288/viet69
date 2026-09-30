@@ -9,14 +9,21 @@
   <link rel="icon" type="image/png" sizes="16x16" href="https://www.vhv.rs/dpng/d/506-5060491_gold-playboy-bunny-png-transparent-png.png">
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#0a0a0c; color:#eee; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
+    body {
+      background: #0a0a0c;
+      color: #eee;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding-bottom: max(env(safe-area-inset-bottom, 0px) + 70px, 85px); /* Tránh thanh điều hướng Cốc Cốc che */
+    }
     
     /* ── HEADER & MODE SWITCHER (CUỘN TỰ NHIÊN) ── */
     #header-bar {
       position: relative;
       background: rgba(13, 14, 18, 0.96);
       border-bottom: 1px solid #22252e;
-      padding: 10px 16px;
+      padding: max(env(safe-area-inset-top, 0px) + 12px, 16px) 16px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -92,9 +99,9 @@
     /* ── 3 NÚT TRÔI XUỐNG KHI CUỘN TRANG (HOME, BACK, NEXT) ── */
     #floating-nav {
       position: fixed;
-      top: 10px;
+      top: max(env(safe-area-inset-top, 0px) + 20px, 26px);
       left: 50%;
-      transform: translateX(-50%) translateY(-60px);
+      transform: translateX(-50%) translateY(-80px);
       opacity: 0;
       pointer-events: none;
       z-index: 99;
@@ -165,6 +172,9 @@
       justify-content: center;
       gap: 6px;
       align-items: center;
+    }
+    #bottom-pagination {
+      padding-bottom: max(env(safe-area-inset-bottom, 0px) + 85px, 100px); /* Nâng cao hàng nút cuối trang lên hẳn khỏi thanh Cốc Cốc */
     }
     .pagination button, .pagination input {
       background: #1b1e28;
@@ -329,16 +339,22 @@
       display: none;
       position: fixed;
       inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
       background: rgba(0,0,0,0.98);
       z-index: 1000;
       justify-content: center;
       align-items: center;
       touch-action: none;
+      overflow: hidden;
+      padding-top: max(env(safe-area-inset-top, 0px), 16px);
+      padding-bottom: max(env(safe-area-inset-bottom, 0px), 20px);
     }
     #modal-content {
       position: relative;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
       display: flex;
       justify-content: center;
@@ -346,18 +362,19 @@
     }
     #video-player {
       max-width: 100%;
-      max-height: 100%;
+      max-height: calc(100% - 75px);
       width: auto;
       height: auto;
       background: black;
       object-fit: contain;
       transition: all 0.4s ease;
+      margin-bottom: max(env(safe-area-inset-bottom, 0px) + 55px, 68px); /* Nâng cao lên tránh thanh Cốc Cốc che */
     }
     #copy-link-btn {
       position: absolute;
-      top: env(safe-area-inset-top, 12px);
-      right: 60px;
-      color: rgba(255, 255, 255, 0.7);
+      top: max(env(safe-area-inset-top, 0px) + 24px, 30px);
+      right: 68px;
+      color: rgba(255, 255, 255, 0.75);
       font-size: 16px;
       cursor: pointer;
       user-select: none;
@@ -389,8 +406,8 @@
     }
     #close-modal {
       position: absolute;
-      top: env(safe-area-inset-top, 12px);
-      right: 14px;
+      top: max(env(safe-area-inset-top, 0px) + 24px, 30px);
+      right: 18px;
       color: white;
       font-size: 32px;
       cursor: pointer;
@@ -477,7 +494,7 @@
     
     #video-title {
       position: absolute;
-      top: env(safe-area-inset-top, 12px);
+      top: max(env(safe-area-inset-top, 0px) + 24px, 30px);
       left: 50%;
       transform: translateX(-50%);
       background: rgba(0, 0, 0, 0.3);
@@ -490,7 +507,7 @@
       font-weight: bold;
       z-index: 11;
       white-space: nowrap;
-      max-width: 80%;
+      max-width: 58%;
       overflow: hidden;
       text-overflow: ellipsis;
       pointer-events: none;
@@ -500,7 +517,7 @@
     }
     #video-duration {
       position: absolute;
-      top: calc(env(safe-area-inset-top, 12px) + 38px);
+      top: calc(max(env(safe-area-inset-top, 0px) + 24px, 30px) + 38px);
       left: 50%;
       transform: translateX(-50%);
       background: rgba(0, 0, 0, 0.28);
@@ -512,7 +529,7 @@
       font-size: 12.5px;
       z-index: 11;
       white-space: nowrap;
-      max-width: 80%;
+      max-width: 60%;
       text-align: center;
       pointer-events: none;
       border: 1px solid rgba(255,255,255,0.15);
@@ -521,8 +538,8 @@
     }
     #video-mode-badge {
       position: absolute;
-      top: env(safe-area-inset-top, 12px);
-      left: 14px;
+      top: max(env(safe-area-inset-top, 0px) + 24px, 30px);
+      left: 18px;
       background: rgba(255, 71, 87, 0.45);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
