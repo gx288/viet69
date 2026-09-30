@@ -3,6 +3,7 @@ import json
 import time
 import sys
 import subprocess
+import re
 from urllib.parse import unquote
 from pathlib import Path
 from selenium import webdriver
@@ -46,11 +47,42 @@ def get_or_create_sheet():
         sheet.append_row(HEADERS)
     return sheet
 
+def extract_video_id(url):
+    """Trích xuất ID/tên file video duy nhất, không phụ thuộc vào subdomain CDN."""
+    if not url: return ""
+    m = re.search(r'/([^/?#]+\.(?:mp4|webm|m4v))', url, re.IGNORECASE)
+    if m:
+        return m.group(1).lower()
+    clean = url.split('?')[0].rstrip('/')
+    return clean.split('/')[-1].lower()
+
+def normalize_url(url):
+    """Tự động chuyển nguồn các domain cũ zpi.cx/zzpi.cc sang amvideo.cfd đang sống."""
+    if not url: return ""
+    return re.sub(r'https?://(?:zpi\.cx|zzpi\.cc)/s?(\d+)/', r'https://s\1.amvideo.cfd/', url)
+
 def load_sheet_video_urls(sheet):
     values = sheet.get_all_values()
-    if not values or len(values) < 2: return set(), []
-    existing_urls = {row[4] for row in values[1:] if len(row) > 4 and row[4].strip()}
-    return existing_urls, values[1:]
+    existing_ids = set()
+    if values and len(values) >= 2:
+        for row in values[1:]:
+            if len(row) > 4 and row[4].strip():
+                vid = extract_video_id(row[4])
+                if vid: existing_ids.add(vid)
+    
+    # Đồng thời nạp toàn bộ ID từ file JSON để chống trùng lặp tuyệt đối
+    path = Path(JSON_PATH)
+    if path.exists():
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for item in json.load(f):
+                    vid = extract_video_id(item.get('video_url', ''))
+                    if vid: existing_ids.add(vid)
+        except Exception as e:
+            print(f"Lỗi nạp ID từ {JSON_PATH}: {e}")
+            
+    print(f"📦 Đã nạp {len(existing_ids):,} ID video hiện có trong kho để check trùng lặp.")
+    return existing_ids, values[1:] if values else []
 
 def write_json(all_data):
     path = Path(JSON_PATH)
@@ -61,26 +93,37 @@ def write_json(all_data):
 def append_or_update_json(new_rows):
     path = Path(JSON_PATH)
     existing_data = []
-    existing_urls = set()
+    existing_ids = set()
     if path.exists():
         with open(path, 'r', encoding='utf-8') as f:
             try: 
                 existing_data = json.load(f)
-                existing_urls = {item.get('video_url', '') for item in existing_data}
-            except: pass
+                existing_ids = {extract_video_id(item.get('video_url', '')) for item in existing_data}
+            except Exception as e:
+                print(f"Lỗi đọc JSON khi cập nhật: {e}")
 
     new_json_items = []
     for row in new_rows:
-        if row[4] not in existing_urls:
+        vid = extract_video_id(row[4])
+        if vid and vid not in existing_ids:
+            existing_ids.add(vid)
             new_json_items.append({
-                "title": row[0], "author": row[1], "duration": row[2],
-                "thumb_url": row[3], "video_url": row[4],
-                "page_number": row[5], "page_link": row[6],
+                "title": row[0],
+                "author": row[1],
+                "duration": row[2],
+                "thumb_url": normalize_url(row[3]),
+                "video_url": normalize_url(row[4]),
+                "page_number": row[5],
+                "page_link": row[6],
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S")
             })
     
     if new_json_items:
+        # Ghi video mới lên đầu danh sách
         write_json(new_json_items + existing_data)
+        print(f"💾 Đã ghi thêm {len(new_json_items)} video mới vào {JSON_PATH}")
+    else:
+        print("ℹ️ Không có video mới hợp lệ để ghi vào JSON.")
 
 # ────────────────────────────────────────────────
 # MAIN SCRAPE FUNCTION
@@ -88,7 +131,7 @@ def append_or_update_json(new_rows):
 
 def scrape_pages(max_pages=None):
     sheet = get_or_create_sheet()
-    existing_video_urls, _ = load_sheet_video_urls(sheet)
+    existing_video_ids, _ = load_sheet_video_urls(sheet)
 
     options = Options()
     options.add_argument('--headless')
@@ -186,9 +229,14 @@ def scrape_pages(max_pages=None):
 
                 if not video_url: continue
 
-                if video_url in existing_video_urls:
+                vid_id = extract_video_id(video_url)
+                if not vid_id: continue
+
+                if vid_id in existing_video_ids:
                     consecutive_duplicates += 1
-                    if consecutive_duplicates > 7: break
+                    if consecutive_duplicates > 7:
+                        print("⏩ Gặp 7 video cũ liên tiếp trên trang. Dừng cào sớm.")
+                        break
                     continue
 
                 consecutive_duplicates = 0
@@ -206,10 +254,13 @@ def scrape_pages(max_pages=None):
                 try: thumb_url = item.find_element(By.TAG_NAME, 'img').get_attribute('src') or ""
                 except: pass
 
-                row = [title, author, duration, thumb_url, video_url, str(page_number), current_url]
+                norm_video_url = normalize_url(video_url)
+                norm_thumb_url = normalize_url(thumb_url)
+
+                row = [title, author, duration, norm_thumb_url, norm_video_url, str(page_number), current_url]
                 page_new_rows.append(row)
-                existing_video_urls.add(video_url)
-                print(f"  + New: {title[:40]}...")
+                existing_video_ids.add(vid_id)
+                print(f"  + New ({vid_id}): {title[:40]}...")
 
             except Exception as e:
                 continue
