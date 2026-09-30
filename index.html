@@ -353,6 +353,40 @@
       object-fit: contain;
       transition: all 0.4s ease;
     }
+    #copy-link-btn {
+      position: absolute;
+      top: env(safe-area-inset-top, 12px);
+      right: 60px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 16px;
+      cursor: pointer;
+      user-select: none;
+      z-index: 12;
+      background: rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.45; /* Nút mờ mờ thôi đừng có hiện rõ */
+      transition: all 0.25s ease;
+      outline: none;
+    }
+    #copy-link-btn:hover {
+      opacity: 0.95;
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.4);
+      color: #fff;
+      transform: scale(1.06);
+    }
+    #copy-link-btn:active {
+      transform: scale(0.92);
+      background: rgba(77, 166, 255, 0.35);
+    }
     #close-modal {
       position: absolute;
       top: env(safe-area-inset-top, 12px);
@@ -509,13 +543,41 @@
     .player-idle #video-title,
     .player-idle #video-duration,
     .player-idle #video-mode-badge,
-    .player-idle #close-modal {
+    .player-idle #close-modal,
+    .player-idle #copy-link-btn {
       opacity: 0.08;
       pointer-events: auto;
     }
     .player-idle #controls:hover,
-    .player-idle #close-modal:hover {
+    .player-idle #close-modal:hover,
+    .player-idle #copy-link-btn:hover {
       opacity: 1;
+    }
+
+    /* Toast thông báo đã copy link */
+    #toast-msg {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.9);
+      background: rgba(16, 18, 26, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #fff;
+      border: 1px solid rgba(77, 166, 255, 0.5);
+      padding: 10px 22px;
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 700;
+      z-index: 2500;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.7);
+    }
+    #toast-msg.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
     }
   </style>
 </head>
@@ -565,6 +627,7 @@
 <!-- ── MODAL PLAYER (XEM VIDEO SIÊU TỐC) ── -->
 <div id="modal">
   <div id="modal-content">
+    <button id="copy-link-btn" title="Copy link video gốc" onclick="copyCurrentVideoSource(event)">🔗</button>
     <span id="close-modal">×</span>
     <span id="video-mode-badge">🔥 Top Like</span>
     <span id="video-title"></span>
@@ -845,7 +908,10 @@ function renderGallery() {
       <div class="thumbnail-title">${item.title || 'Video không tên'}</div>
       ${dur ? `<div class="thumbnail-duration">${dur}</div>` : ''}
     `;
-    div.addEventListener('click', () => openModal(idx));
+    div.addEventListener('click', () => {
+      modalNavigationHistory = [];
+      openModal(idx);
+    });
     (i % 2 === 0 ? leftColumn : rightColumn).appendChild(div);
   });
 
@@ -943,6 +1009,7 @@ function closeModal() {
     clearTimeout(idleTimer);
     idleTimer = null;
   }
+  modalNavigationHistory = [];
   videoTitle.textContent = '';
   videoTitle.style.display = 'none';
   videoDuration.textContent = '';
@@ -961,12 +1028,10 @@ function retryCurrentVideo() {
   }
 }
 
-// ── QUY LUẬT NEXT VIDEO THEO VỊ TRÍ MÀN HÌNH ──
-function nextVideoByPosition() {
-  if (isSwitchingPage) return;
-
+// ── DANH SÁCH THUMBNAIL SẮP XẾP THEO THỨ TỰ TRÊN MÀN HÌNH ──
+function getVisualCandidates() {
   const thumbnails = [...document.querySelectorAll('.thumbnail')];
-  if (thumbnails.length === 0) return;
+  if (thumbnails.length === 0) return [];
 
   let candidates = thumbnails.map(thumb => {
     const idx = parseInt(thumb.dataset.index);
@@ -985,15 +1050,40 @@ function nextVideoByPosition() {
     return a.top - b.top;
   });
 
+  return candidates;
+}
+
+// Lịch sử điều hướng trong modal (để vuốt ngược lại luôn về đúng video vừa xem)
+let modalNavigationHistory = [];
+
+function recordNavigationHistory(idx) {
+  if (idx === undefined || idx === null || idx < 0) return;
+  if (modalNavigationHistory.length === 0 || modalNavigationHistory[modalNavigationHistory.length - 1] !== idx) {
+    modalNavigationHistory.push(idx);
+    if (modalNavigationHistory.length > 50) {
+      modalNavigationHistory.shift();
+    }
+  }
+}
+
+// ── QUY LUẬT NEXT VIDEO THEO VỊ TRÍ MÀN HÌNH (VUỐT LÊN) ──
+function nextVideoByPosition() {
+  if (isSwitchingPage) return;
+
+  const candidates = getVisualCandidates();
+  if (candidates.length === 0) return;
+
   const currentPos = candidates.findIndex(c => c.index === currentVideoIndex);
 
   if (currentPos !== -1 && currentPos < candidates.length - 1) {
     const nextIndex = candidates[currentPos + 1].index;
+    recordNavigationHistory(currentVideoIndex);
     openModal(nextIndex);
   } else {
     if (currentPage < getTotalPages()) {
       const nextPage = currentPage + 1;
       const nextPageFirstIdx = (nextPage - 1) * ITEMS_PER_PAGE;
+      recordNavigationHistory(currentVideoIndex);
       openModal(nextPageFirstIdx);
     } else {
       alert("Bạn đã xem hết video trên toàn bộ các trang!");
@@ -1002,9 +1092,34 @@ function nextVideoByPosition() {
   }
 }
 
+// ── QUY LUẬT PREV VIDEO (VUỐT XUỐNG / VUỐT NGƯỢC LẠI) ──
 function prevVideo() {
-  if (currentVideoIndex > 0) {
-    openModal(currentVideoIndex - 1);
+  if (isSwitchingPage) return;
+
+  // 1. Ưu tiên số 1: Trả về đúng video vừa phát trước đó theo lịch sử lướt
+  if (modalNavigationHistory.length > 0) {
+    const prevIndex = modalNavigationHistory.pop();
+    openModal(prevIndex);
+    return;
+  }
+
+  // 2. Nếu lịch sử trống (vừa vào video đầu tiên mà vuốt ngược ngay):
+  // Lấy video nằm ngay phía trên video hiện tại theo vị trí hiển thị trên màn hình
+  const candidates = getVisualCandidates();
+  if (candidates.length > 0) {
+    const currentPos = candidates.findIndex(c => c.index === currentVideoIndex);
+    if (currentPos > 0) {
+      const prevIndex = candidates[currentPos - 1].index;
+      openModal(prevIndex);
+      return;
+    }
+  }
+
+  // 3. Nếu đang ở đầu trang và còn trang trước đó
+  if (currentPage > 1) {
+    const prevPage = currentPage - 1;
+    const prevPageLastIdx = prevPage * ITEMS_PER_PAGE - 1;
+    openModal(prevPageLastIdx);
   }
 }
 
@@ -1012,6 +1127,9 @@ function prevVideo() {
 function playRandomVideo() {
   if (!allData || allData.length === 0) return;
   const randomIdx = Math.floor(Math.random() * allData.length);
+  if (currentVideoIndex >= 0) {
+    recordNavigationHistory(currentVideoIndex);
+  }
   openModal(randomIdx);
 }
 
@@ -1023,11 +1141,12 @@ modal.addEventListener('touchstart', e => {
 }, {passive: true});
 
 modal.addEventListener('touchend', e => {
+  if (e.target.closest('#controls') || e.target.closest('#copy-link-btn') || e.target.closest('#close-modal') || e.target.closest('#video-error-box')) return;
   const dx = e.changedTouches[0].clientX - touchStartX;
   const dy = e.changedTouches[0].clientY - touchStartY;
   const adx = Math.abs(dx), ady = Math.abs(dy);
   if (adx > ady && adx > 60) closeModal();
-  else if (ady > adx && ady > 60) {
+  else if (ady > adx && ady > 50) {
     if (dy > 0) prevVideo(); else nextVideoByPosition();
   }
 }, {passive: true});
@@ -1269,6 +1388,54 @@ function cycleSpeed() {
 
 speedButton.addEventListener('click', cycleSpeed);
 
+// ── COPY LINK VIDEO GỐC ĐANG PHÁT (CHỈ Ở PLAYER) ──
+let toastTimer = null;
+function showToast(msg) {
+  let toast = document.getElementById('toast-msg');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 1800);
+}
+
+function copyCurrentVideoSource(e) {
+  if (e) e.stopPropagation();
+  if (currentVideoIndex < 0 || !allData[currentVideoIndex]) return;
+  
+  const sourceUrl = player.currentSrc || player.src || allData[currentVideoIndex].video_url;
+  if (!sourceUrl) return;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(sourceUrl).then(() => {
+      showToast("📋 Đã copy link video!");
+    }).catch(() => {
+      fallbackCopyText(sourceUrl);
+    });
+  } else {
+    fallbackCopyText(sourceUrl);
+  }
+}
+
+function fallbackCopyText(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand("copy");
+    showToast("📋 Đã copy link video!");
+  } catch (err) {
+    prompt("Copy link video:", text);
+  }
+  document.body.removeChild(ta);
+}
+
 // Các nút điều khiển khác trong modal
 document.getElementById('send-telegram').onclick = sendToTelegram;
 document.getElementById('random-video').onclick = playRandomVideo;
@@ -1278,6 +1445,7 @@ document.getElementById('rotate-90').onclick = () => {
 };
 document.getElementById('forward-10').onclick = () => { player.currentTime += 10; };
 document.getElementById('close-modal').onclick = closeModal;
+document.getElementById('copy-link-btn').onclick = copyCurrentVideoSource;
 window.addEventListener('resize', updateVideoRotationAndScale);
 
 // ── TỰ ĐỘNG LÀM MỜ NÚT KHI ĐANG XEM (AUTO-DIM IDLE TRÁNH CHE VIDEO) ──
@@ -1368,5 +1536,6 @@ const initialParams = new URLSearchParams(window.location.search);
 const initialMode = initialParams.get('mode') === 'latest' ? 'latest' : 'likes';
 loadModeData(initialMode);
 </script>
+<div id="toast-msg"></div>
 </body>
 </html>
