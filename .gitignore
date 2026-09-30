@@ -1,3 +1,7 @@
-﻿__pycache__/
+__pycache__/
 *.pyc
+*.log
+deploy_netlify.py
+anhmoe/deploy_netlify.py
+*.tmp
 
