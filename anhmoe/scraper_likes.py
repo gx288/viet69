@@ -51,14 +51,22 @@ def get_sheet():
         print(f"Lưu ý: Không kết nối được Google Sheet ({e}). Bỏ qua cập nhật Sheet.")
         return None
 
+def is_video_file(url):
+    """Kiểm tra URL có phải là định dạng video hợp lệ hay không (loại bỏ ảnh tĩnh jpeg/png/webp)."""
+    if not url: return False
+    return bool(re.search(r'\.(?:mp4|webm|m4v|mov|mkv)(?:$|[?#])', url, re.IGNORECASE))
+
 def extract_video_id(url):
     """Trích xuất ID/tên file video duy nhất, không phụ thuộc vào subdomain CDN."""
-    if not url: return ""
-    m = re.search(r'/([^/?#]+\.(?:mp4|webm|m4v))', url, re.IGNORECASE)
+    if not url or not is_video_file(url): return ""
+    m = re.search(r'/([^/?#]+)\.(?:mp4|webm|m4v|mov|mkv)', url, re.IGNORECASE)
     if m:
         return m.group(1).lower()
     clean = url.split('?')[0].rstrip('/')
-    return clean.split('/')[-1].lower()
+    base = clean.split('/')[-1].lower()
+    if is_video_file(base):
+        return re.sub(r'\.(?:mp4|webm|m4v|mov|mkv)$', '', base, flags=re.IGNORECASE)
+    return ""
 
 def normalize_url(url):
     """Tự động chuyển nguồn các domain cũ zpi.cx/zzpi.cc sang amvideo.cfd đang sống."""
@@ -111,7 +119,7 @@ def parse_page_html(html, current_url, page_number):
             data_obj = json.loads(decoded_str)
 
             video_url = data_obj.get('image', {}).get('url') or data_obj.get('url') or ''
-            if not video_url:
+            if not video_url or not is_video_file(video_url):
                 continue
 
             title = data_obj.get('display_title') or data_obj.get('title') or 'Unknown'

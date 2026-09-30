@@ -356,74 +356,89 @@
     #close-modal {
       position: absolute;
       top: env(safe-area-inset-top, 12px);
-      right: 16px;
+      right: 14px;
       color: white;
-      font-size: 46px;
+      font-size: 32px;
       cursor: pointer;
-      text-shadow: 0 0 8px black;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95);
       user-select: none;
       z-index: 12;
       line-height: 1;
+      background: rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.25s ease;
+    }
+    #close-modal:hover {
+      background: rgba(255, 255, 255, 0.25);
+      transform: scale(1.08);
     }
    
-    /* ── CONTROLS IN MODAL ──
-       1. Nút Random ở trên nút x1
-       2. Nút +10s ở trung tâm (to hơn)
-       3. Màu nền đồng bộ kính đen, giảm độ trong suốt (rõ nét hơn)
-    ── */
+    /* ── CONTROLS IN MODAL (NỀN TRONG SUỐT CAO, CHỮ NÚT RÕ RÀNG, TỰ MỜ KHI PLAY) ── */
     #controls {
       position: absolute;
-      left: 14px;
+      left: 12px;
       top: 50%;
       transform: translateY(-50%);
       background: transparent;
-      padding: 10px 4px;
+      padding: 6px 2px;
       border-radius: 12px;
       display: flex;
       flex-direction: column;
       gap: 10px;
       z-index: 10;
-      min-width: 70px;
+      min-width: 60px;
+      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     #controls button {
       color: #fff;
-      border: 1px solid rgba(255,255,255,0.28);
-      padding: 14px 4px;
+      border: 1px solid rgba(255,255,255,0.22);
+      padding: 12px 2px;
       border-radius: 10px;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 700;
-      min-width: 48px;
-      max-width: 52px;
+      min-width: 44px;
+      max-width: 50px;
       text-align: center;
       line-height: 1;
-      opacity: 0.9;
-      background: rgba(16, 18, 26, 0.88);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      opacity: 0.95;
+      background: rgba(0, 0, 0, 0.22); /* NỀN TRONG SUỐT CAO KHÔNG CHE VIDEO */
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.9); /* CHỮ SẮC NÉT */
       transition: all 0.2s ease;
       user-select: none;
     }
     #controls button:hover {
-      background: rgba(35, 40, 56, 0.95);
-      border-color: rgba(255,255,255,0.5);
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255,255,255,0.55);
       opacity: 1;
       transform: scale(1.05);
     }
     #controls button.active {
       border-color: #4da6ff;
       color: #4da6ff;
-      box-shadow: 0 0 10px rgba(77, 166, 255, 0.4);
+      background: rgba(77, 166, 255, 0.25);
+      box-shadow: 0 0 12px rgba(77, 166, 255, 0.5);
     }
     
     #forward-10 {
-      min-width: 68px !important;
-      max-width: 72px !important;
-      font-size: 21px !important;
+      min-width: 58px !important;
+      max-width: 64px !important;
+      font-size: 19px !important;
       font-weight: 800 !important;
-      padding: 20px 2px !important;
-      border-color: rgba(255,255,255,0.4) !important;
+      padding: 16px 2px !important;
+      background: rgba(0, 0, 0, 0.28) !important;
+      border-color: rgba(255,255,255,0.32) !important;
     }
     
     #video-title {
@@ -431,53 +446,76 @@
       top: env(safe-area-inset-top, 12px);
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0,0,0,0.8);
-      backdrop-filter: blur(6px);
+      background: rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       color: white;
-      padding: 9px 18px;
+      padding: 7px 14px;
       border-radius: 10px;
-      font-size: 17px;
+      font-size: 15px;
       font-weight: bold;
       z-index: 11;
       white-space: nowrap;
-      max-width: 85%;
+      max-width: 80%;
       overflow: hidden;
       text-overflow: ellipsis;
       pointer-events: none;
-      text-shadow: 0 1px 4px black;
-      border: 1px solid rgba(255,255,255,0.15);
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95);
+      border: 1px solid rgba(255,255,255,0.18);
+      transition: opacity 0.3s ease;
     }
     #video-duration {
       position: absolute;
-      top: calc(env(safe-area-inset-top, 12px) + 42px);
+      top: calc(env(safe-area-inset-top, 12px) + 38px);
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0,0,0,0.75);
-      backdrop-filter: blur(6px);
-      color: #dcdde1;
-      padding: 6px 14px;
+      background: rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: #e2e8f0;
+      padding: 3px 10px;
       border-radius: 8px;
-      font-size: 14px;
+      font-size: 12.5px;
       z-index: 11;
       white-space: nowrap;
-      max-width: 85%;
+      max-width: 80%;
       text-align: center;
       pointer-events: none;
-      border: 1px solid rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.15);
+      text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+      transition: opacity 0.3s ease;
     }
     #video-mode-badge {
       position: absolute;
       top: env(safe-area-inset-top, 12px);
-      left: 16px;
-      background: rgba(255, 71, 87, 0.9);
+      left: 14px;
+      background: rgba(255, 71, 87, 0.45);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       color: white;
-      padding: 5px 11px;
+      padding: 4px 10px;
       border-radius: 8px;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: bold;
       z-index: 11;
       pointer-events: none;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.2);
+      transition: opacity 0.3s ease;
+    }
+
+    /* Tự động làm mờ khi xem video (auto-dim idle) để hoàn toàn không che video */
+    .player-idle #controls,
+    .player-idle #video-title,
+    .player-idle #video-duration,
+    .player-idle #video-mode-badge,
+    .player-idle #close-modal {
+      opacity: 0.08;
+      pointer-events: auto;
+    }
+    .player-idle #controls:hover,
+    .player-idle #close-modal:hover {
+      opacity: 1;
     }
   </style>
 </head>
@@ -594,14 +632,23 @@ const videoDuration = document.getElementById('video-duration');
 const videoModeBadge = document.getElementById('video-mode-badge');
 const dataStatusBadge = document.getElementById('data-status-badge');
 
+// ── KIỂM TRA ĐỊNH DẠNG VIDEO HỢP LỆ (LOẠI BỎ ẢNH TĨNH JPEG/PNG/WEBP) ──
+function isVideoUrl(url) {
+  if (!url) return false;
+  return /\.(?:mp4|webm|m4v|mov|mkv)(?:$|[?#])/i.test(url);
+}
+
 // ── TRÍCH XUẤT VIDEO ID DUY NHẤT (Chuẩn xác 100% không phụ thuộc CDN hay vị trí) ──
 function extractVideoId(url) {
-  if (!url) return '';
-  const m = url.match(/\/([^\/?#]+)\.(?:mp4|webm|m4v)/i);
+  if (!url || !isVideoUrl(url)) return '';
+  const m = url.match(/\/([^\/?#]+)\.(?:mp4|webm|m4v|mov|mkv)(?:$|[?#])/i);
   if (m) return m[1].toLowerCase();
   const clean = url.split('?')[0].replace(/\/+$/, '');
   const base = clean.split('/').pop().toLowerCase();
-  return base.replace(/\.(?:mp4|webm|m4v)$/i, '');
+  if (/\.(?:mp4|webm|m4v|mov|mkv)$/i.test(base)) {
+    return base.replace(/\.(?:mp4|webm|m4v|mov|mkv)$/i, '');
+  }
+  return '';
 }
 
 // Tự động chuyển nguồn các tên miền cũ (zpi.cx / zzpi.cc) sang amvideo.cfd đang sống
@@ -662,14 +709,14 @@ player.addEventListener('play', () => { if (modal.style.display === 'flex') requ
 player.addEventListener('pause', releaseWakeLock);
 player.addEventListener('ended', releaseWakeLock);
 
-// Parse dữ liệu & LỌC TRÙNG LẶP THEO VIDEO ID
+// Parse dữ liệu & LỌC TRÙNG LẶP THEO VIDEO ID + LOẠI BỎ ẢNH TĨNH
 function parseJsonData(jsonArray) {
   const data = [];
   const seenFiles = new Set();
   
   for (const item of jsonArray) {
     let vUrl = item?.video_url;
-    if (vUrl && vUrl.startsWith('http')) {
+    if (vUrl && vUrl.startsWith('http') && isVideoUrl(vUrl)) {
       vUrl = fixVideoUrl(vUrl);
       const vidId = extractVideoId(vUrl);
       
@@ -758,12 +805,12 @@ function updateModeButtonsUI() {
     btnLikes.classList.add('active');
     btnLatest.classList.remove('active');
     videoModeBadge.textContent = '🔥 Top Like';
-    videoModeBadge.style.background = 'rgba(255, 71, 87, 0.9)';
+    videoModeBadge.style.background = 'rgba(255, 71, 87, 0.45)';
   } else {
     btnLatest.classList.add('active');
     btnLikes.classList.remove('active');
     videoModeBadge.textContent = '⚡ Mới Nhất';
-    videoModeBadge.style.background = 'rgba(30, 144, 255, 0.9)';
+    videoModeBadge.style.background = 'rgba(30, 144, 255, 0.45)';
   }
 }
 
@@ -858,6 +905,7 @@ function doOpenModal(idx) {
   if (!player.paused) requestWakeLock();
 
   setTimeout(scrollToCurrentThumbnail, 150);
+  resetIdleTimer();
 
   player.onended = nextVideoByPosition;
   videoTitle.textContent = videoItem.title || 'Video không tên';
@@ -890,6 +938,11 @@ function closeModal() {
   currentRotation = 0;
   updateVideoRotationAndScale();
   modal.style.display = 'none';
+  modal.classList.remove('player-idle');
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
   videoTitle.textContent = '';
   videoTitle.style.display = 'none';
   videoDuration.textContent = '';
@@ -1226,6 +1279,44 @@ document.getElementById('rotate-90').onclick = () => {
 document.getElementById('forward-10').onclick = () => { player.currentTime += 10; };
 document.getElementById('close-modal').onclick = closeModal;
 window.addEventListener('resize', updateVideoRotationAndScale);
+
+// ── TỰ ĐỘNG LÀM MỜ NÚT KHI ĐANG XEM (AUTO-DIM IDLE TRÁNH CHE VIDEO) ──
+let idleTimer = null;
+function resetIdleTimer() {
+  modal.classList.remove('player-idle');
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+  if (!player.paused && modal.style.display === 'flex') {
+    idleTimer = setTimeout(() => {
+      if (!player.paused && modal.style.display === 'flex') {
+        modal.classList.add('player-idle');
+      }
+    }, 2500);
+  }
+}
+
+modal.addEventListener('mousemove', resetIdleTimer);
+modal.addEventListener('touchstart', resetIdleTimer, { passive: true });
+modal.addEventListener('touchmove', resetIdleTimer, { passive: true });
+modal.addEventListener('pointerdown', resetIdleTimer);
+modal.addEventListener('click', (e) => {
+  if (modal.classList.contains('player-idle')) {
+    resetIdleTimer();
+    e.stopPropagation();
+    return;
+  }
+  resetIdleTimer();
+});
+player.addEventListener('play', resetIdleTimer);
+player.addEventListener('pause', () => {
+  modal.classList.remove('player-idle');
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+});
 
 // Phím tắt bàn phím (Desktop)
 window.addEventListener('keydown', (e) => {
