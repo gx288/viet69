@@ -9,41 +9,30 @@
   <link rel="icon" type="image/png" sizes="16x16" href="https://www.vhv.rs/dpng/d/506-5060491_gold-playboy-bunny-png-transparent-png.png">
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body {
-      background: #090a0f;
-      color: #eee;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
-    }
+    body { background:#0a0a0c; color:#eee; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
     
-    /* ── HEADER (KHÔNG STICKY - CUỘN TỰ NHIÊN THEO TRANG) ── */
+    /* ── HEADER & MODE SWITCHER (KHÔNG STICKY, CUỘN TỰ NHIÊN) ── */
     #header-bar {
       position: relative;
-      background: #0f1118;
-      border-bottom: 1px solid #1f2330;
-      padding: 12px 16px;
+      background: rgba(13, 14, 18, 0.96);
+      border-bottom: 1px solid #22252e;
+      padding: 10px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 10px;
     }
     .header-brand {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       cursor: pointer;
       user-select: none;
-      text-decoration: none;
     }
-    .brand-logo {
-      font-size: 24px;
-      filter: drop-shadow(0 2px 6px rgba(255, 71, 87, 0.4));
-      line-height: 1;
-    }
+    .brand-logo { font-size: 22px; filter: drop-shadow(0 2px 4px rgba(255, 71, 87, 0.3)); }
     .brand-name {
-      font-size: 20px;
+      font-size: 19px;
       font-weight: 800;
       letter-spacing: -0.5px;
       background: linear-gradient(135deg, #ff4757, #ffa502);
@@ -52,17 +41,17 @@
     }
     .mode-switch-group {
       display: flex;
-      background: #171923;
+      background: #161820;
       padding: 4px;
       border-radius: 30px;
-      border: 1px solid #282c3c;
+      border: 1px solid #2b2e3b;
       gap: 4px;
     }
     .mode-btn {
       background: transparent;
       color: #9aa0a6;
       border: none;
-      padding: 7px 16px;
+      padding: 7px 15px;
       border-radius: 20px;
       font-size: 13.5px;
       font-weight: 600;
@@ -92,167 +81,45 @@
       gap: 6px;
     }
     .status-badge {
-      background: #1b1e2a;
-      border: 1px solid #2d3345;
-      padding: 4px 11px;
+      background: #1c1f28;
+      border: 1px solid #2d3240;
+      padding: 3px 9px;
       border-radius: 12px;
       color: #4da6ff;
-      font-weight: 700;
+      font-weight: bold;
     }
 
-    /* ── THANH ĐIỀU HƯỚNG DÍNH (STICKY NAV: NEXT / PREV / RANDOM / XEM TIẾP) ── */
-    #sticky-nav {
-      position: sticky;
-      top: 0;
-      z-index: 90;
-      background: rgba(12, 14, 20, 0.94);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
-      padding: 8px 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .sticky-nav-left, .sticky-nav-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .sticky-nav-center {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      min-width: 0;
-    }
-
-    /* Nút bấm chuyển trang trên sticky bar: to, rõ nét, dễ bấm */
-    .sticky-nav-btn {
-      background: #1a1d29;
-      color: #e4e7eb;
-      border: 1px solid #2f3549;
-      padding: 8px 14px;
-      border-radius: 9px;
-      cursor: pointer;
-      font-size: 14.5px;
-      font-weight: 700;
-      min-height: 42px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      user-select: none;
-    }
-    .sticky-nav-btn:hover {
-      background: #272d40;
-      border-color: #4a5472;
-      color: #fff;
-    }
-    .sticky-nav-btn.btn-next {
-      background: linear-gradient(135deg, #1e90ff, #00d2d3);
-      color: #fff;
-      border-color: transparent;
-      box-shadow: 0 2px 10px rgba(0, 210, 211, 0.35);
-    }
-    .sticky-nav-btn.btn-next:hover {
-      filter: brightness(1.12);
-      transform: translateY(-1px);
-    }
-    .sticky-icon-btn {
-      background: #1a1d29;
-      color: #e4e7eb;
-      border: 1px solid #2f3549;
-      width: 42px;
-      height: 42px;
-      border-radius: 9px;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      transition: all 0.2s ease;
-      user-select: none;
-    }
-    .sticky-icon-btn:hover {
-      background: #272d40;
-      border-color: #4a5472;
-      color: #fff;
-      transform: scale(1.05);
-    }
-    .sticky-page-badge {
-      background: #161823;
-      border: 1px solid #282d3e;
-      color: #dcdde1;
-      padding: 8px 14px;
-      border-radius: 9px;
-      font-size: 13.5px;
-      font-weight: 700;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all 0.2s ease;
-      user-select: none;
-    }
-    .sticky-page-badge:hover {
-      background: #222636;
-      border-color: #3f4762;
-      color: #fff;
-    }
-    .sticky-page-badge strong {
-      color: #4da6ff;
-    }
-
-    /* ── GALLERY & THUMBNAILS ── */
-    #gallery {
-      display: flex;
-      width: 100%;
-      padding: 10px 8px;
-      gap: 10px;
-      min-height: 50vh;
-    }
-    .column {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-width: 0;
-    }
+    /* ── GALLERY & THUMBNAILS (HIỂN THỊ FULL THUMBNAIL TỰ NHIÊN NHƯ CŨ, KHÔNG CẮT XÉN) ── */
+    #gallery { display: flex; width: 100%; padding: 8px; gap: 8px; min-height: 50vh; }
+    .column { flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .thumbnail {
       position: relative;
       cursor: pointer;
       overflow: hidden;
-      border: 1px solid #1c1f2b;
-      border-radius: 10px;
-      background: #12141c;
+      border: 1px solid #1f222b;
+      border-radius: 8px;
+      background: #13151b;
       display: block;
-      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+      transition: transform 0.2s ease, border-color 0.2s ease;
     }
     .thumbnail:hover {
-      transform: translateY(-3px);
-      border-color: #3b4256;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+      transform: translateY(-2px);
+      border-color: #3e4456;
     }
     .thumbnail img {
       width: 100%;
       height: auto;
       display: block;
-      background: #171924;
-      aspect-ratio: 16 / 9;
-      object-fit: cover;
+      background: #1a1d26;
     }
     .thumbnail-title {
       position: absolute;
       bottom: 0; left: 0; right: 0;
-      background: linear-gradient(transparent, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.98) 100%);
-      padding: 26px 10px 10px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.92) 50%, #000);
+      padding: 24px 8px 8px;
       font-size: 13.5px;
       line-height: 1.35;
-      text-align: left;
+      text-align: center;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -260,39 +127,39 @@
     }
     .thumbnail-duration {
       position: absolute;
-      bottom: 10px;
-      right: 10px;
-      background: rgba(0,0,0,0.82);
+      bottom: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.78);
       backdrop-filter: blur(4px);
       color: #fff;
-      padding: 2px 7px;
-      border-radius: 5px;
+      padding: 2px 6px;
+      border-radius: 4px;
       font-size: 11.5px;
-      font-weight: 700;
+      font-weight: bold;
       z-index: 2;
-      border: 1px solid rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.15);
     }
     
     /* ── ĐÁNH DẤU ĐÃ XEM (CHUẨN THEO ID VIDEO) ── */
     .watched::after {
       content: "✓ Đã xem";
       position: absolute;
-      top: 8px;
-      right: 8px;
-      background: rgba(46, 213, 115, 0.94);
-      color: #05240e;
+      top: 6px;
+      right: 6px;
+      background: rgba(46, 213, 115, 0.92);
+      color: #0b2210;
       font-size: 11px;
       font-weight: 800;
-      padding: 4px 8px;
-      border-radius: 8px;
+      padding: 3px 7px;
+      border-radius: 10px;
       line-height: 1;
       z-index: 3;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.6);
       pointer-events: none;
     }
     .watched img {
-      opacity: 0.65;
-      filter: brightness(0.8);
+      opacity: 0.68;
+      filter: brightness(0.85);
       transition: opacity 0.2s, filter 0.2s;
     }
     .watched:hover img {
@@ -300,117 +167,86 @@
       filter: brightness(1);
     }
 
-    /* ── PHÂN TRANG DƯỚI (PAGINATION) - TO, DỄ BẤM, TỐI GIẢN XỊN XÒ ── */
-    .pagination-wrapper {
-      padding: 24px 12px 40px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
+    /* ── PAGINATION (STICK NÚT NEXT & PREV TRÊN ĐẦU, NÚT TO DỄ BẤM) ── */
+    #top-pagination {
+      position: sticky;
+      top: 0;
+      z-index: 90;
+      background: rgba(10, 10, 12, 0.96);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.45);
     }
-    .pagination-pages {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
-    }
-    .pagination-btn {
-      background: #171924;
-      color: #e4e7eb;
-      border: 1px solid #2b3042;
-      padding: 10px 16px;
-      border-radius: 9px;
-      cursor: pointer;
-      font-size: 15px;
-      font-weight: 700;
-      min-width: 46px;
-      min-height: 44px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      user-select: none;
-    }
-    .pagination-btn:hover {
-      background: #272d40;
-      border-color: #4a5474;
-      color: #fff;
-      transform: translateY(-1px);
-    }
-    .pagination-btn.current {
-      background: linear-gradient(135deg, #1e90ff, #00d2d3);
-      color: #fff;
-      border-color: transparent;
-      box-shadow: 0 4px 14px rgba(0, 210, 211, 0.4);
-    }
-    .pagination-btn.nav-step {
-      font-size: 16px;
-      padding: 10px 18px;
-    }
-    .pagination-ellipsis {
-      color: #555b6d;
-      font-size: 16px;
-      padding: 0 4px;
-      user-select: none;
-    }
-
-    /* Thanh công cụ phụ tối giản */
-    .pagination-tools {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
-      background: #10121a;
-      border: 1px solid #1f2330;
-      padding: 8px 16px;
-      border-radius: 30px;
-      font-size: 13px;
-    }
-    .jump-group {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .jump-input {
-      background: #181a26;
-      color: #fff;
-      border: 1px solid #2b3042;
-      border-radius: 6px;
-      padding: 6px 8px;
-      width: 58px;
+    .pagination {
       text-align: center;
-      font-size: 13.5px;
-      font-weight: bold;
+      padding: 10px 8px;
+      background: #0a0a0c;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      align-items: center;
     }
-    .jump-btn {
-      background: #252a3b;
+    .pagination button, .pagination input {
+      background: #1b1e28;
       color: #eee;
-      border: 1px solid #363c52;
-      border-radius: 6px;
-      padding: 6px 12px;
+      border: 1px solid #282d3c;
+      padding: 8px 12px;
+      border-radius: 7px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 14.5px;
+      font-weight: 600;
+      min-width: 42px;
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .pagination button:hover { background: #2f3547; border-color: #4a536e; }
+    .pagination button.current {
+      background: linear-gradient(135deg, #1e90ff, #00d2d3);
+      color: white;
+      font-weight: bold;
+      border-color: transparent;
+      box-shadow: 0 2px 8px rgba(0, 210, 211, 0.35);
+    }
+    .pagination button.nav-arrow {
+      font-size: 18px;
+      font-weight: bold;
+      min-width: 48px;
+      padding: 8px 14px;
+    }
+    .pagination button.ellipsis { background: transparent; border: none; cursor: default; color: #666; min-width: 20px; }
+    .pagination button.clear-cache { background: #5f1515; border-color: #832020; }
+    .pagination button.clear-cache:hover { background: #861e1e; }
+    .pagination button.random-btn {
+      background: #1b1e28;
+      border-color: #3e4456;
       font-weight: bold;
     }
-    .jump-btn:hover { background: #353c54; color: #fff; }
-    .tool-sep { color: #2c3246; user-select: none; }
-    .tool-tag { color: #7b8290; }
-    .tool-btn {
-      background: #181a26;
-      color: #b2becd;
-      border: 1px solid #2a2e40;
-      padding: 5px 11px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12.5px;
-      font-weight: 600;
+    .pagination button.random-btn:hover {
+      background: #2a3042;
+      border-color: #5a6480;
     }
-    .tool-btn:hover { background: #262c3e; color: #fff; }
-    .tool-btn.danger { background: #441419; border-color: #631c23; color: #ff7675; }
-    .tool-btn.danger:hover { background: #611820; color: #fff; }
+    #page-title {
+      cursor: pointer;
+      padding: 8px 14px;
+      background: #1f2330;
+      border: 1px solid #2e3447;
+      border-radius: 7px;
+      min-width: 140px;
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      color: #ced6e0;
+    }
+    #page-title:hover { background: #2c3244; color: #fff; }
 
     /* ── LOADING & ERROR STATE ── */
     .state-box {
@@ -430,7 +266,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── MODAL PLAYER (XEM VIDEO) ── */
+    /* ── MODAL PLAYER ── */
     #modal {
       display: none;
       position: fixed;
@@ -459,41 +295,23 @@
       object-fit: contain;
       transition: all 0.4s ease;
     }
-    
-    /* Nút đóng tròn kính tối màu, cực kỳ sắc nét */
     #close-modal {
       position: absolute;
-      top: env(safe-area-inset-top, 14px);
+      top: env(safe-area-inset-top, 12px);
       right: 16px;
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      background: rgba(16, 18, 26, 0.85);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      color: #fff;
-      font-size: 26px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      color: white;
+      font-size: 46px;
       cursor: pointer;
+      text-shadow: 0 0 8px black;
       user-select: none;
-      z-index: 25;
+      z-index: 12;
       line-height: 1;
-      transition: all 0.2s ease;
-    }
-    #close-modal:hover {
-      background: rgba(255, 71, 87, 0.9);
-      border-color: #ff4757;
-      transform: scale(1.08);
     }
    
     /* ── CONTROLS IN MODAL ──
        1. Nút Random ở trên nút x1
-       2. Nút +10s ở trung tâm (to, nổi bật)
-       3. Giảm độ trong suốt (opacity 0.92, background đậm nét)
-       4. Đồng bộ màu nền đen kính, KHÔNG để màu nền khác (bỏ màu cam)
+       2. Nút +10s ở trung tâm (to hơn)
+       3. Màu nền đồng bộ kính đen, giảm độ trong suốt (rõ nét hơn)
     ── */
     #controls {
       position: absolute;
@@ -501,181 +319,115 @@
       top: 50%;
       transform: translateY(-50%);
       background: transparent;
+      padding: 10px 4px;
+      border-radius: 12px;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 11px;
-      z-index: 20;
+      gap: 10px;
+      z-index: 10;
+      min-width: 70px;
     }
     #controls button {
       color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.28);
+      padding: 14px 4px;
+      border-radius: 10px;
       cursor: pointer;
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 700;
-      min-width: 50px;
-      max-width: 54px;
-      padding: 13px 4px;
+      min-width: 48px;
+      max-width: 52px;
       text-align: center;
       line-height: 1;
-      opacity: 0.92; /* Giảm độ trong suốt -> sắc nét, đậm rõ */
+      opacity: 0.9; /* Giảm độ trong suốt -> sắc nét, đậm rõ */
       background: rgba(16, 18, 26, 0.88); /* Đồng bộ màu nền nhất quán */
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      transition: all 0.2s ease;
       user-select: none;
     }
     #controls button:hover {
-      background: rgba(36, 42, 58, 0.95);
-      border-color: rgba(255, 255, 255, 0.45);
+      background: rgba(35, 40, 56, 0.95);
+      border-color: rgba(255,255,255,0.5);
       opacity: 1;
-      transform: scale(1.06);
+      transform: scale(1.05);
     }
     #controls button.active {
       border-color: #4da6ff;
       color: #4da6ff;
-      box-shadow: 0 0 14px rgba(77, 166, 255, 0.5);
+      opacity: 1;
+      box-shadow: 0 0 10px rgba(77, 166, 255, 0.4);
     }
     
-    /* Nút +10s ở trung tâm: To hơn, rõ ràng, trọng tâm */
+    /* Nút +10s ở trung tâm: To hơn, rõ ràng */
     #forward-10 {
       min-width: 68px !important;
       max-width: 72px !important;
       font-size: 21px !important;
       font-weight: 800 !important;
       padding: 20px 2px !important;
-      border-color: rgba(255, 255, 255, 0.35) !important;
+      border-color: rgba(255,255,255,0.4) !important;
     }
     
     #video-title {
       position: absolute;
-      top: env(safe-area-inset-top, 14px);
+      top: env(safe-area-inset-top, 12px);
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(16, 18, 26, 0.88);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(6px);
       color: white;
       padding: 9px 18px;
       border-radius: 10px;
-      font-size: 16px;
-      font-weight: 700;
-      z-index: 20;
+      font-size: 17px;
+      font-weight: bold;
+      z-index: 11;
       white-space: nowrap;
-      max-width: 75%;
+      max-width: 85%;
       overflow: hidden;
       text-overflow: ellipsis;
       pointer-events: none;
       text-shadow: 0 1px 4px black;
-      border: 1px solid rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.15);
     }
     #video-duration {
       position: absolute;
-      top: calc(env(safe-area-inset-top, 14px) + 44px);
+      top: calc(env(safe-area-inset-top, 12px) + 42px);
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(16, 18, 26, 0.82);
-      backdrop-filter: blur(10px);
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(6px);
       color: #dcdde1;
-      padding: 5px 12px;
+      padding: 6px 14px;
       border-radius: 8px;
-      font-size: 13.5px;
-      font-weight: 600;
-      z-index: 20;
+      font-size: 14px;
+      z-index: 11;
       white-space: nowrap;
+      max-width: 85%;
+      text-align: center;
       pointer-events: none;
-      border: 1px solid rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.12);
     }
     #video-mode-badge {
       position: absolute;
-      top: env(safe-area-inset-top, 14px);
+      top: env(safe-area-inset-top, 12px);
       left: 16px;
       background: rgba(255, 71, 87, 0.9);
       color: white;
-      padding: 6px 12px;
+      padding: 5px 11px;
       border-radius: 8px;
-      font-size: 12.5px;
-      font-weight: 800;
-      z-index: 20;
-      pointer-events: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-    }
-
-    /* Modal Nhảy trang nhanh */
-    #jump-dialog {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.7);
-      z-index: 200;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .jump-dialog-box {
-      background: #141722;
-      border: 1px solid #2d3348;
-      border-radius: 14px;
-      padding: 22px;
-      width: 100%;
-      max-width: 320px;
-      text-align: center;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.7);
-    }
-    .jump-dialog-title {
-      font-size: 17px;
-      font-weight: 800;
-      color: #fff;
-      margin-bottom: 14px;
-    }
-    .jump-dialog-input {
-      width: 100%;
-      background: #1e2232;
-      border: 1px solid #3b435d;
-      color: #fff;
-      font-size: 18px;
+      font-size: 12px;
       font-weight: bold;
-      text-align: center;
-      padding: 10px;
-      border-radius: 8px;
-      margin-bottom: 16px;
-    }
-    .jump-dialog-actions {
-      display: flex;
-      gap: 10px;
-    }
-    .jump-dialog-actions button {
-      flex: 1;
-      padding: 10px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14.5px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    /* Media query màn hình nhỏ */
-    @media (max-width: 480px) {
-      #header-bar { padding: 10px 12px; }
-      .brand-name { font-size: 18px; }
-      .mode-btn { padding: 6px 12px; font-size: 12.5px; }
-      #sticky-nav { padding: 6px 8px; }
-      .sticky-nav-btn { padding: 7px 11px; font-size: 13.5px; min-height: 38px; }
-      .sticky-icon-btn { width: 38px; height: 38px; font-size: 15px; }
-      .sticky-page-badge { padding: 6px 10px; font-size: 12.5px; }
-      .pagination-btn { padding: 8px 12px; min-width: 40px; min-height: 40px; font-size: 14px; }
+      z-index: 11;
+      pointer-events: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
     }
   </style>
 </head>
 <body>
 
-<!-- ── HEADER (KHÔNG STICKY - CUỘN TỰ NHIÊN) ── -->
+<!-- ── HEADER & 2 CHẾ ĐỘ XEM (KHÔNG STICKY, CUỘN TỰ NHIÊN) ── -->
 <header id="header-bar">
   <div class="header-brand" onclick="location.href='?'">
     <span class="brand-logo">🐰</span>
@@ -698,51 +450,26 @@
   </div>
 </header>
 
-<!-- ── THANH STICKY ĐIỀU HƯỚNG DÍNH TRÊN ĐẦU: TRANG TRƯỚC / SAU / RANDOM / XEM TIẾP ── -->
-<nav id="sticky-nav">
-  <div class="sticky-nav-left">
-    <button class="sticky-nav-btn" id="sticky-btn-prev" onclick="goToPage(currentPage - 1)" title="Trang trước (Phím Mũi tên trái)">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-      <span>Trước</span>
-    </button>
-  </div>
+<!-- ── PHÂN TRANG TRÊN (STICKY DÍNH Ở ĐẦU TRANG KHI CUỘN) ── -->
+<div class="pagination" id="top-pagination"></div>
 
-  <div class="sticky-nav-center">
-    <div class="sticky-page-badge" id="sticky-page-indicator" onclick="openJumpDialog()" title="Bấm để nhảy nhanh tới trang">
-      <span id="sticky-mode-text">🔥 Top Like</span>
-      <span style="opacity:0.4;">•</span>
-      <span>Trang <strong id="sticky-current-num">1</strong> / <span id="sticky-total-num">1</span></span>
-      <span style="font-size:10px; opacity:0.6;">▼</span>
-    </div>
-  </div>
+<!-- ── GALLERY LƯỚI VIDEO (FULL THUMBNAIL TỰ NHIÊN) ── -->
+<div id="gallery"></div>
 
-  <div class="sticky-nav-right">
-    <button class="sticky-icon-btn" onclick="playRandomVideo()" title="🎲 Xem video ngẫu nhiên">🎲</button>
-    <button class="sticky-icon-btn" onclick="resumeLastVideo()" title="▶ Mở lại video gần nhất">▶</button>
-    <button class="sticky-nav-btn btn-next" id="sticky-btn-next" onclick="goToPage(currentPage + 1)" title="Trang kế tiếp (Phím Mũi tên phải)">
-      <span>Sau</span>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-    </button>
-  </div>
-</nav>
-
-<!-- ── GALLERY LƯỚI VIDEO ── -->
-<main id="gallery"></main>
-
-<!-- ── PHÂN TRANG CUỐI TRANG & CÔNG CỤ ── -->
-<footer class="pagination-wrapper" id="bottom-pagination"></footer>
+<!-- ── PHÂN TRANG DƯỚI ── -->
+<div class="pagination" id="bottom-pagination"></div>
 
 <!-- ── MODAL PLAYER (XEM VIDEO SIÊU TỐC) ── -->
 <div id="modal">
   <div id="modal-content">
-    <span id="close-modal" title="Đóng (Esc)">✕</span>
+    <span id="close-modal">×</span>
     <span id="video-mode-badge">🔥 Top Like</span>
     <span id="video-title"></span>
     <span id="video-duration"></span>
     <video id="video-player" controls autoplay playsinline></video>
    
     <!-- Hộp thông báo nếu CDN lỗi -->
-    <div id="video-error-box" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(18,20,28,0.95); border:1px solid #ff4757; padding:22px 26px; border-radius:12px; text-align:center; z-index:25; max-width:88%; box-shadow:0 8px 32px rgba(0,0,0,0.8);">
+    <div id="video-error-box" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(18,20,28,0.95); border:1px solid #ff4757; padding:22px 26px; border-radius:12px; text-align:center; z-index:15; max-width:88%; box-shadow:0 8px 32px rgba(0,0,0,0.8);">
       <p style="color:#ff6b81; font-size:16px; font-weight:bold; margin-bottom:8px;">⚠️ Không thể tải video này</p>
       <p style="color:#a4b0be; font-size:13.5px; margin-bottom:16px; line-height:1.4;">Đường truyền CDN tạm thời ngắt quãng hoặc file đang bảo trì.</p>
       <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
@@ -753,11 +480,12 @@
    
     <!--
       CÁC NÚT ĐIỀU KHIỂN TRONG TRÌNH PHÁT:
-      - Nút Random ở trên nút x1
-      - Nút +10s ở trung tâm (to hơn, nổi bật)
-      - Nút xoay 90 độ
-      - Nút Lưu (Telegram)
-      - Màu nền đồng bộ kính đen mờ, giảm độ trong suốt (rõ nét hơn)
+      1. Nút Random ở trên nút x1
+      2. Nút x1
+      3. Nút +10s ở trung tâm (to hơn)
+      4. Nút +90°
+      5. Nút Lưu
+      Màu nền kính đồng bộ, giảm độ trong suốt (rõ nét hơn)
     -->
     <div id="controls">
       <button id="random-video" title="Random video khác">🎲</button>
@@ -765,18 +493,6 @@
       <button id="forward-10" title="Tua tới 10 giây">+10s</button>
       <button id="rotate-90" title="Xoay video 90 độ">+90°</button>
       <button id="send-telegram" title="Lưu / Chia sẻ Telegram">Lưu</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── MODAL NHẢY TRANG NHANH ── -->
-<div id="jump-dialog" onclick="if(event.target===this) closeJumpDialog()">
-  <div class="jump-dialog-box">
-    <div class="jump-dialog-title">Nhảy tới trang</div>
-    <input type="number" id="jump-page-input" class="jump-dialog-input" min="1" />
-    <div class="jump-dialog-actions">
-      <button onclick="closeJumpDialog()" style="background:#262b3c; color:#a4b0be;">Hủy</button>
-      <button onclick="submitJumpDialog()" style="background:linear-gradient(135deg, #1e90ff, #00d2d3); color:#fff;">Đến trang</button>
     </div>
   </div>
 </div>
@@ -919,7 +635,7 @@ async function loadModeData(mode) {
     gallery.innerHTML = `
       <div class="state-box">
         <div class="spinner" style="border-top-color:${mode === 'likes' ? '#ff4757' : '#1e90ff'};"></div>
-        <p style="font-size:16px; font-weight:700;">Đang tải danh sách ${modeLabel}...</p>
+        <p style="font-size:16px; font-weight:600;">Đang tải danh sách ${modeLabel}...</p>
         <p style="font-size:13px; color:#666; margin-top:6px;">Vui lòng đợi giây lát</p>
       </div>
     `;
@@ -937,7 +653,7 @@ async function loadModeData(mode) {
         <div class="state-box">
           <p style="color:#ff6b6b; font-size:16px; font-weight:bold;">⚠️ Không thể tải dữ liệu ${modeLabel}</p>
           <p style="color:#888; font-size:13px; margin:8px 0 16px;">${err.message}</p>
-          <button onclick="loadModeData('${mode}')" style="background:#272b3b; color:#fff; border:1px solid #3b4256; padding:10px 20px; border-radius:8px; cursor:font-weight:bold;">Thử lại</button>
+          <button onclick="loadModeData('${mode}')" style="background:#333; color:#fff; border:none; padding:8px 16px; border-radius:6px; cursor:pointer;">Thử lại</button>
         </div>
       `;
       dataStatusBadge.textContent = 'Lỗi';
@@ -961,7 +677,6 @@ async function loadModeData(mode) {
 
   renderGallery();
   renderPagination();
-  updateStickyNav();
   updateURL();
 }
 
@@ -974,47 +689,20 @@ function switchMode(newMode) {
 function updateModeButtonsUI() {
   const btnLikes = document.getElementById('btn-mode-likes');
   const btnLatest = document.getElementById('btn-mode-latest');
-  const stickyModeText = document.getElementById('sticky-mode-text');
-  
   if (currentMode === 'likes') {
     btnLikes.classList.add('active');
     btnLatest.classList.remove('active');
     videoModeBadge.textContent = '🔥 Top Like';
     videoModeBadge.style.background = 'rgba(255, 71, 87, 0.9)';
-    if (stickyModeText) stickyModeText.textContent = '🔥 Top Like';
   } else {
     btnLatest.classList.add('active');
     btnLikes.classList.remove('active');
     videoModeBadge.textContent = '⚡ Mới Nhất';
     videoModeBadge.style.background = 'rgba(30, 144, 255, 0.9)';
-    if (stickyModeText) stickyModeText.textContent = '⚡ Mới Nhất';
   }
 }
 
-// ── CẬP NHẬT THANH ĐIỀU HƯỚNG DÍNH (STICKY NAV) ──
-function updateStickyNav() {
-  const total = getTotalPages();
-  const curEl = document.getElementById('sticky-current-num');
-  const totEl = document.getElementById('sticky-total-num');
-  const prevBtn = document.getElementById('sticky-btn-prev');
-  const nextBtn = document.getElementById('sticky-btn-next');
-
-  if (curEl) curEl.textContent = currentPage;
-  if (totEl) totEl.textContent = total;
-
-  if (prevBtn) {
-    prevBtn.disabled = (currentPage <= 1);
-    prevBtn.style.opacity = (currentPage <= 1) ? '0.4' : '1';
-    prevBtn.style.cursor = (currentPage <= 1) ? 'not-allowed' : 'pointer';
-  }
-  if (nextBtn) {
-    nextBtn.disabled = (currentPage >= total);
-    nextBtn.style.opacity = (currentPage >= total) ? '0.4' : '1';
-    nextBtn.style.cursor = (currentPage >= total) ? 'not-allowed' : 'pointer';
-  }
-}
-
-// ── RENDER GALLERY VỚI ĐÁNH DẤU ĐÃ XEM CHUẨN XÁC ──
+// ── RENDER GALLERY (FULL THUMBNAIL TỰ NHIÊN, KHÔNG CẮT XÉN) ──
 function renderGallery() {
   const start = (currentPage - 1) * ITEMS_PER_PAGE;
   const end = start + ITEMS_PER_PAGE;
@@ -1209,16 +897,6 @@ function playRandomVideo() {
   openModal(randomIdx);
 }
 
-// ── MỞ LẠI VIDEO GẦN NHẤT ──
-function resumeLastVideo() {
-  const savedIdx = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
-  if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < allData.length) {
-    openModal(savedIdx);
-  } else if (allData.length > 0) {
-    openModal(0);
-  }
-}
-
 // Cử chỉ cảm ứng vuốt màn hình
 let touchStartX = 0, touchStartY = 0;
 modal.addEventListener('touchstart', e => {
@@ -1270,113 +948,126 @@ function clearAllViewed() {
   }
 }
 
-// ── PHÂN TRANG DƯỚI (PAGINATION) - TO, DỄ BẤM, TỐI GIẢN XỊN XÒ ──
+// ── PHÂN TRANG (STICKY Ở TRÊN, NÚT TO RÕ DỄ BẤM) ──
 function renderPagination() {
   const total = getTotalPages();
-  const cont = document.getElementById('bottom-pagination');
-  if (!cont) return;
-  cont.innerHTML = '';
+  const modeLabel = currentMode === 'likes' ? 'Top Like' : 'Mới Nhất';
 
-  // Hàng chính: Các nút chuyển trang lớn, dễ bấm
-  const pagesRow = document.createElement('div');
-  pagesRow.className = 'pagination-pages';
+  [document.getElementById('top-pagination'), document.getElementById('bottom-pagination')].forEach(cont => {
+    if (!cont) return;
+    cont.innerHTML = '';
+    
+    // Nút Trang trước (‹)
+    const prev = document.createElement('button');
+    prev.textContent = '‹';
+    prev.className = 'nav-arrow';
+    prev.title = 'Trang trước';
+    prev.onclick = () => goToPage(currentPage - 1);
+    cont.appendChild(prev);
 
-  // Nút Trang trước (‹ Trước)
-  const prevBtn = document.createElement('button');
-  prevBtn.className = 'pagination-btn nav-step';
-  prevBtn.innerHTML = `‹ Trước`;
-  prevBtn.disabled = (currentPage <= 1);
-  if (currentPage <= 1) {
-    prevBtn.style.opacity = '0.35';
-    prevBtn.style.cursor = 'not-allowed';
-  } else {
-    prevBtn.onclick = () => goToPage(currentPage - 1);
-  }
-  pagesRow.appendChild(prevBtn);
+    // Tiêu đề trang (Bấm vào để về trang 1 hoặc nhảy trang)
+    const title = document.createElement('span');
+    title.id = 'page-title';
+    title.textContent = `${modeLabel}: Trang ${currentPage} / ${total}`;
+    title.onclick = () => { if (currentPage !== 1) goToPage(1, true); };
+    cont.appendChild(title);
 
-  // Danh sách các số trang thông minh
-  const range = 2;
-  let s = Math.max(1, currentPage - range);
-  let e = Math.min(total, currentPage + range);
+    // Ô nhập trang
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min = 1; inp.max = total; inp.value = currentPage;
+    inp.style.width = '64px'; inp.style.textAlign = 'center';
+    cont.appendChild(inp);
 
-  if (s > 1) {
-    const b = document.createElement('button');
-    b.className = 'pagination-btn';
-    b.textContent = '1';
-    b.onclick = () => goToPage(1);
-    pagesRow.appendChild(b);
+    const goBtn = document.createElement('button');
+    goBtn.textContent = 'Go';
+    goBtn.onclick = () => goToPage(parseInt(inp.value) || 1);
+    cont.appendChild(goBtn);
 
-    if (s > 2) {
-      const el = document.createElement('span');
-      el.className = 'pagination-ellipsis';
-      el.textContent = '...';
-      pagesRow.appendChild(el);
+    const range = 2;
+    let s = Math.max(1, currentPage - range);
+    let e = Math.min(total, currentPage + range);
+    if (s > 1) {
+      const b = document.createElement('button'); b.textContent = '1'; b.onclick = () => goToPage(1); cont.appendChild(b);
+      if (s > 2) {
+        const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
+      }
     }
-  }
-
-  for (let p = s; p <= e; p++) {
-    const b = document.createElement('button');
-    b.className = 'pagination-btn';
-    b.textContent = p;
-    if (p === currentPage) {
-      b.classList.add('current');
-    } else {
+    for (let p = s; p <= e; p++) {
+      const b = document.createElement('button');
+      b.textContent = p;
+      if (p === currentPage) b.classList.add('current');
       b.onclick = () => goToPage(p);
+      cont.appendChild(b);
     }
-    pagesRow.appendChild(b);
-  }
-
-  if (e < total) {
-    if (e < total - 1) {
-      const el = document.createElement('span');
-      el.className = 'pagination-ellipsis';
-      el.textContent = '...';
-      pagesRow.appendChild(el);
+    if (e < total) {
+      if (e < total - 1) {
+        const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
+      }
+      const b = document.createElement('button'); b.textContent = total; b.onclick = () => goToPage(total); cont.appendChild(b);
     }
-    const b = document.createElement('button');
-    b.className = 'pagination-btn';
-    b.textContent = total;
-    b.onclick = () => goToPage(total);
-    pagesRow.appendChild(b);
-  }
 
-  // Nút Trang kế (Sau ›)
-  const nextBtn = document.createElement('button');
-  nextBtn.className = 'pagination-btn nav-step';
-  nextBtn.innerHTML = `Sau ›`;
-  nextBtn.disabled = (currentPage >= total);
-  if (currentPage >= total) {
-    nextBtn.style.opacity = '0.35';
-    nextBtn.style.cursor = 'not-allowed';
-  } else {
-    nextBtn.onclick = () => goToPage(currentPage + 1);
-  }
-  pagesRow.appendChild(nextBtn);
+    // Nút Trang kế (›)
+    const next = document.createElement('button');
+    next.textContent = '›';
+    next.className = 'nav-arrow';
+    next.title = 'Trang sau';
+    next.onclick = () => goToPage(currentPage + 1);
+    cont.appendChild(next);
 
-  cont.appendChild(pagesRow);
+    const lp = document.createElement('button');
+    lp.textContent = 'Cuối';
+    lp.title = 'Tới trang cuối cùng';
+    lp.onclick = () => goToPage(total);
+    cont.appendChild(lp);
 
-  // Hàng công cụ phụ: Tối giản, gọn gàng, không rối mắt
-  const toolsRow = document.createElement('div');
-  toolsRow.className = 'pagination-tools';
-  toolsRow.innerHTML = `
-    <div class="jump-group">
-      <span class="tool-tag">Đến trang:</span>
-      <input type="number" id="bottom-jump-input" class="jump-input" min="1" max="${total}" value="${currentPage}" />
-      <button class="jump-btn" onclick="goToPage(parseInt(document.getElementById('bottom-jump-input').value) || 1)">Đi</button>
-    </div>
+    // Nút Tiếp tục xem (Last Video)
+    const lv = document.createElement('button');
+    lv.textContent = '▶ Xem tiếp';
+    lv.title = 'Mở lại video gần nhất trong chế độ này';
+    lv.onclick = () => {
+      const savedIdx = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
+      if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < allData.length) {
+        openModal(savedIdx);
+      } else if (allData.length > 0) {
+        openModal(0);
+      }
+    };
+    cont.appendChild(lv);
 
-    <span class="tool-sep">|</span>
+    // Nút Random Video
+    const rnd = document.createElement('button');
+    rnd.textContent = '🎲 Random';
+    rnd.className = 'random-btn';
+    rnd.title = 'Phát ngẫu nhiên 1 video';
+    rnd.onclick = playRandomVideo;
+    cont.appendChild(rnd);
 
-    <span class="tool-tag">Đã xem:</span>
-    <button class="tool-btn" onclick="clearViewedWithinLast(60*60*1000)" title="Xóa video đã xem trong 1 giờ qua">1h</button>
-    <button class="tool-btn" onclick="clearViewedWithinLast(24*60*60*1000)" title="Xóa video đã xem trong 24 giờ qua">1d</button>
-    <button class="tool-btn danger" onclick="clearAllViewed()" title="Xóa sạch toàn bộ lịch sử đã xem">Xóa hết</button>
+    cont.appendChild(document.createElement('div')).style.width = '10px';
 
-    <span class="tool-sep">|</span>
+    const lbl = document.createElement('span');
+    lbl.textContent = 'Xóa đã xem:';
+    lbl.style.color = '#777'; lbl.style.fontSize = '13px';
+    cont.appendChild(lbl);
 
-    <button class="tool-btn" onclick="if(confirm('Xoá cache dữ liệu và tải lại?')) location.reload(true);" title="Làm mới cache">🔄 F5 Tải lại</button>
-  `;
-  cont.appendChild(toolsRow);
+    const b1h = document.createElement('button');
+    b1h.textContent = '1h'; b1h.onclick = () => clearViewedWithinLast(60*60*1000);
+    cont.appendChild(b1h);
+
+    const b1d = document.createElement('button');
+    b1d.textContent = '1d'; b1d.onclick = () => clearViewedWithinLast(24*60*60*1000);
+    cont.appendChild(b1d);
+
+    const ball = document.createElement('button');
+    ball.textContent = 'Tất cả'; ball.style.background = '#5f1515';
+    ball.onclick = clearAllViewed;
+    cont.appendChild(ball);
+
+    const cc = document.createElement('button');
+    cc.textContent = 'F5 Cache'; cc.className = 'clear-cache';
+    cc.onclick = () => { if (confirm('Xoá cache dữ liệu và tải lại?')) location.reload(true); };
+    cont.appendChild(cc);
+  });
 }
 
 function goToPage(p) {
@@ -1385,41 +1076,10 @@ function goToPage(p) {
   currentPage = p;
   renderGallery();
   renderPagination();
-  updateStickyNav();
   updateURL();
   localStorage.setItem(`lastPage_${currentMode}`, currentPage);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
-
-// ── POPUP NHẢY TRANG NHANH ──
-function openJumpDialog() {
-  const total = getTotalPages();
-  const dialog = document.getElementById('jump-dialog');
-  const input = document.getElementById('jump-page-input');
-  if (!dialog || !input) return;
-  input.max = total;
-  input.value = currentPage;
-  dialog.style.display = 'flex';
-  setTimeout(() => { input.focus(); input.select(); }, 50);
-}
-
-function closeJumpDialog() {
-  const dialog = document.getElementById('jump-dialog');
-  if (dialog) dialog.style.display = 'none';
-}
-
-function submitJumpDialog() {
-  const input = document.getElementById('jump-page-input');
-  if (!input) return;
-  const p = parseInt(input.value);
-  closeJumpDialog();
-  if (!isNaN(p)) goToPage(p);
-}
-
-document.getElementById('jump-page-input')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') submitJumpDialog();
-  else if (e.key === 'Escape') closeJumpDialog();
-});
 
 // ── TELEGRAM SHARE / LƯU ──
 function sendToTelegram() {
@@ -1471,9 +1131,6 @@ window.addEventListener('resize', updateVideoRotationAndScale);
 
 // Phím tắt bàn phím (Desktop)
 window.addEventListener('keydown', (e) => {
-  if (document.getElementById('jump-dialog')?.style.display === 'flex') {
-    return;
-  }
   if (modal.style.display === 'flex') {
     if (e.key === 'Escape') {
       closeModal();
