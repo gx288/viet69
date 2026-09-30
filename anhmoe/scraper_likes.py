@@ -213,9 +213,8 @@ def scrape_likes(max_pages=None):
             ])
             added_on_page += 1
 
-        if page_number % 10 == 0 or page_number == 1 or not next_url or (max_pages and page_number >= max_pages):
-            elapsed = time.time() - start_time
-            print(f"📄 Trang {page_number:3d}: +{added_on_page} video mới (Tổng: {len(scraped_json_items):,} video) | {elapsed:.1f}s")
+        elapsed = time.time() - start_time
+        print(f"📄 Trang {page_number:3d}: +{added_on_page:2d} video (Tổng: {len(scraped_json_items):,} video) | {elapsed:.1f}s", flush=True)
 
         if max_pages and page_number >= max_pages:
             print(f"\n🏁 Đã đạt giới hạn {max_pages} trang theo yêu cầu.")
