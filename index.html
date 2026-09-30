@@ -89,7 +89,71 @@
       font-weight: bold;
     }
 
-    /* ── GALLERY & THUMBNAILS (HIỂN THỊ FULL THUMBNAIL TỰ NHIÊN NHƯ CŨ, KHÔNG CẮT XÉN) ── */
+    /* ── CHỈ GHIM NÚT HOME, BACK, NEXT (TỐI GIẢN, KHÔNG NỀN ĐEN TRÀN MÀN HÌNH) ── */
+    #sticky-nav {
+      position: sticky;
+      top: 8px;
+      z-index: 90;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      pointer-events: none;
+      background: transparent;
+      margin-bottom: 4px;
+      height: 0;
+    }
+    .sticky-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 18, 26, 0.9);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      padding: 5px 8px;
+      border-radius: 30px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+      pointer-events: auto;
+    }
+    .sticky-btn {
+      background: #202432;
+      color: #eee;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 7px 13px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13.5px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .sticky-btn:hover {
+      background: #2e3549;
+      border-color: rgba(255, 255, 255, 0.3);
+      color: #fff;
+    }
+    .sticky-btn.btn-home {
+      background: rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
+      border: none;
+    }
+    .sticky-btn.btn-home strong {
+      color: #4da6ff;
+    }
+    .sticky-btn.btn-next {
+      background: linear-gradient(135deg, #1e90ff, #00d2d3);
+      color: #fff;
+      border: none;
+      box-shadow: 0 2px 8px rgba(0, 210, 211, 0.35);
+    }
+    .sticky-btn.btn-next:hover {
+      filter: brightness(1.12);
+    }
+
+    /* ── GALLERY & THUMBNAILS (FULL THUMBNAIL, BỎ NỀN ĐEN DƯỚI TIÊU ĐỀ) ── */
     #gallery { display: flex; width: 100%; padding: 8px; gap: 8px; min-height: 50vh; }
     .column { flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .thumbnail {
@@ -115,15 +179,17 @@
     .thumbnail-title {
       position: absolute;
       bottom: 0; left: 0; right: 0;
-      background: linear-gradient(transparent, rgba(0,0,0,0.92) 50%, #000);
-      padding: 24px 8px 8px;
-      font-size: 13.5px;
+      background: transparent; /* BỎ NỀN ĐEN Ở DƯỚI TIÊU ĐỀ */
+      padding: 6px 8px;
+      font-size: 13px;
       line-height: 1.35;
       text-align: center;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      color: #f1f2f6;
+      color: #fff;
+      text-shadow: 0 1px 3px #000, 0 2px 6px #000, 0 0 10px #000;
+      font-weight: 600;
     }
     .thumbnail-duration {
       position: absolute;
@@ -167,20 +233,10 @@
       filter: brightness(1);
     }
 
-    /* ── PAGINATION (STICK NÚT NEXT & PREV TRÊN ĐẦU, NÚT TO DỄ BẤM) ── */
-    #top-pagination {
-      position: sticky;
-      top: 0;
-      z-index: 90;
-      background: rgba(10, 10, 12, 0.96);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      box-shadow: 0 4px 16px rgba(0,0,0,0.45);
-    }
+    /* ── PHÂN TRANG ĐẦY ĐỦ Ở CUỐI TRANG ── */
     .pagination {
       text-align: center;
-      padding: 10px 8px;
+      padding: 18px 8px 36px;
       background: #0a0a0c;
       display: flex;
       flex-wrap: wrap;
@@ -339,8 +395,8 @@
       max-width: 52px;
       text-align: center;
       line-height: 1;
-      opacity: 0.9; /* Giảm độ trong suốt -> sắc nét, đậm rõ */
-      background: rgba(16, 18, 26, 0.88); /* Đồng bộ màu nền nhất quán */
+      opacity: 0.9;
+      background: rgba(16, 18, 26, 0.88);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       box-shadow: 0 4px 12px rgba(0,0,0,0.5);
@@ -360,7 +416,6 @@
       box-shadow: 0 0 10px rgba(77, 166, 255, 0.4);
     }
     
-    /* Nút +10s ở trung tâm: To hơn, rõ ràng */
     #forward-10 {
       min-width: 68px !important;
       max-width: 72px !important;
@@ -450,13 +505,19 @@
   </div>
 </header>
 
-<!-- ── PHÂN TRANG TRÊN (STICKY DÍNH Ở ĐẦU TRANG KHI CUỘN) ── -->
-<div class="pagination" id="top-pagination"></div>
+<!-- ── CHỈ GHIM 3 NÚT: HOME, BACK, NEXT (TỐI GIẢN, KHÔNG NỀN ĐEN TRÀN MÀN HÌNH) ── -->
+<nav id="sticky-nav">
+  <div class="sticky-pill">
+    <button class="sticky-btn" id="sticky-btn-back" onclick="goToPage(currentPage - 1)" title="Trang trước (‹)">‹ Back</button>
+    <button class="sticky-btn btn-home" onclick="goToPage(1)" title="Về trang đầu (Home)">🏠 Trang <strong id="sticky-curr">1</strong>/<span id="sticky-total">1</span></button>
+    <button class="sticky-btn btn-next" id="sticky-btn-next" onclick="goToPage(currentPage + 1)" title="Trang sau (›)">Next ›</button>
+  </div>
+</nav>
 
-<!-- ── GALLERY LƯỚI VIDEO (FULL THUMBNAIL TỰ NHIÊN) ── -->
+<!-- ── GALLERY LƯỚI VIDEO (FULL THUMBNAIL, KHÔNG NỀN ĐEN DƯỚI TIÊU ĐỀ) ── -->
 <div id="gallery"></div>
 
-<!-- ── PHÂN TRANG DƯỚI ── -->
+<!-- ── PHÂN TRANG ĐẦY ĐỦ Ở CUỐI TRANG (KHÔNG BỊ GHIM LÀM TRÀN MÀN HÌNH) ── -->
 <div class="pagination" id="bottom-pagination"></div>
 
 <!-- ── MODAL PLAYER (XEM VIDEO SIÊU TỐC) ── -->
@@ -702,7 +763,7 @@ function updateModeButtonsUI() {
   }
 }
 
-// ── RENDER GALLERY (FULL THUMBNAIL TỰ NHIÊN, KHÔNG CẮT XÉN) ──
+// ── RENDER GALLERY (FULL THUMBNAIL TỰ NHIÊN, BỎ NỀN ĐEN DƯỚI TIÊU ĐỀ) ──
 function renderGallery() {
   const start = (currentPage - 1) * ITEMS_PER_PAGE;
   const end = start + ITEMS_PER_PAGE;
@@ -948,126 +1009,146 @@ function clearAllViewed() {
   }
 }
 
-// ── PHÂN TRANG (STICKY Ở TRÊN, NÚT TO RÕ DỄ BẤM) ──
+// ── CẬP NHẬT PHÂN TRANG (CẬP NHẬT 3 NÚT GHIM & PHÂN TRANG DƯỚI) ──
 function renderPagination() {
   const total = getTotalPages();
   const modeLabel = currentMode === 'likes' ? 'Top Like' : 'Mới Nhất';
 
-  [document.getElementById('top-pagination'), document.getElementById('bottom-pagination')].forEach(cont => {
-    if (!cont) return;
-    cont.innerHTML = '';
-    
-    // Nút Trang trước (‹)
-    const prev = document.createElement('button');
-    prev.textContent = '‹';
-    prev.className = 'nav-arrow';
-    prev.title = 'Trang trước';
-    prev.onclick = () => goToPage(currentPage - 1);
-    cont.appendChild(prev);
+  // 1. Cập nhật thanh ghim gọn nhẹ 3 nút (Home, Back, Next)
+  const stickyCurr = document.getElementById('sticky-curr');
+  const stickyTotal = document.getElementById('sticky-total');
+  const stickyBack = document.getElementById('sticky-btn-back');
+  const stickyNext = document.getElementById('sticky-btn-next');
 
-    // Tiêu đề trang (Bấm vào để về trang 1 hoặc nhảy trang)
-    const title = document.createElement('span');
-    title.id = 'page-title';
-    title.textContent = `${modeLabel}: Trang ${currentPage} / ${total}`;
-    title.onclick = () => { if (currentPage !== 1) goToPage(1, true); };
-    cont.appendChild(title);
+  if (stickyCurr) stickyCurr.textContent = currentPage;
+  if (stickyTotal) stickyTotal.textContent = total;
 
-    // Ô nhập trang
-    const inp = document.createElement('input');
-    inp.type = 'number';
-    inp.min = 1; inp.max = total; inp.value = currentPage;
-    inp.style.width = '64px'; inp.style.textAlign = 'center';
-    cont.appendChild(inp);
+  if (stickyBack) {
+    stickyBack.disabled = (currentPage <= 1);
+    stickyBack.style.opacity = (currentPage <= 1) ? '0.35' : '1';
+    stickyBack.style.cursor = (currentPage <= 1) ? 'not-allowed' : 'pointer';
+  }
+  if (stickyNext) {
+    stickyNext.disabled = (currentPage >= total);
+    stickyNext.style.opacity = (currentPage >= total) ? '0.35' : '1';
+    stickyNext.style.cursor = (currentPage >= total) ? 'not-allowed' : 'pointer';
+  }
 
-    const goBtn = document.createElement('button');
-    goBtn.textContent = 'Go';
-    goBtn.onclick = () => goToPage(parseInt(inp.value) || 1);
-    cont.appendChild(goBtn);
+  // 2. Cập nhật phân trang đầy đủ ở đáy trang (#bottom-pagination)
+  const cont = document.getElementById('bottom-pagination');
+  if (!cont) return;
+  cont.innerHTML = '';
+  
+  // Nút Trang trước (‹)
+  const prev = document.createElement('button');
+  prev.textContent = '‹';
+  prev.className = 'nav-arrow';
+  prev.title = 'Trang trước';
+  prev.onclick = () => goToPage(currentPage - 1);
+  cont.appendChild(prev);
 
-    const range = 2;
-    let s = Math.max(1, currentPage - range);
-    let e = Math.min(total, currentPage + range);
-    if (s > 1) {
-      const b = document.createElement('button'); b.textContent = '1'; b.onclick = () => goToPage(1); cont.appendChild(b);
-      if (s > 2) {
-        const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
-      }
+  // Tiêu đề trang (Bấm vào để về trang 1 hoặc nhảy trang)
+  const title = document.createElement('span');
+  title.id = 'page-title';
+  title.textContent = `${modeLabel}: Trang ${currentPage} / ${total}`;
+  title.onclick = () => { if (currentPage !== 1) goToPage(1, true); };
+  cont.appendChild(title);
+
+  // Ô nhập trang
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.min = 1; inp.max = total; inp.value = currentPage;
+  inp.style.width = '64px'; inp.style.textAlign = 'center';
+  cont.appendChild(inp);
+
+  const goBtn = document.createElement('button');
+  goBtn.textContent = 'Go';
+  goBtn.onclick = () => goToPage(parseInt(inp.value) || 1);
+  cont.appendChild(goBtn);
+
+  const range = 2;
+  let s = Math.max(1, currentPage - range);
+  let e = Math.min(total, currentPage + range);
+  if (s > 1) {
+    const b = document.createElement('button'); b.textContent = '1'; b.onclick = () => goToPage(1); cont.appendChild(b);
+    if (s > 2) {
+      const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
     }
-    for (let p = s; p <= e; p++) {
-      const b = document.createElement('button');
-      b.textContent = p;
-      if (p === currentPage) b.classList.add('current');
-      b.onclick = () => goToPage(p);
-      cont.appendChild(b);
+  }
+  for (let p = s; p <= e; p++) {
+    const b = document.createElement('button');
+    b.textContent = p;
+    if (p === currentPage) b.classList.add('current');
+    b.onclick = () => goToPage(p);
+    cont.appendChild(b);
+  }
+  if (e < total) {
+    if (e < total - 1) {
+      const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
     }
-    if (e < total) {
-      if (e < total - 1) {
-        const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
-      }
-      const b = document.createElement('button'); b.textContent = total; b.onclick = () => goToPage(total); cont.appendChild(b);
+    const b = document.createElement('button'); b.textContent = total; b.onclick = () => goToPage(total); cont.appendChild(b);
+  }
+
+  // Nút Trang kế (›)
+  const next = document.createElement('button');
+  next.textContent = '›';
+  next.className = 'nav-arrow';
+  next.title = 'Trang sau';
+  next.onclick = () => goToPage(currentPage + 1);
+  cont.appendChild(next);
+
+  const lp = document.createElement('button');
+  lp.textContent = 'Cuối';
+  lp.title = 'Tới trang cuối cùng';
+  lp.onclick = () => goToPage(total);
+  cont.appendChild(lp);
+
+  // Nút Tiếp tục xem (Last Video)
+  const lv = document.createElement('button');
+  lv.textContent = '▶ Xem tiếp';
+  lv.title = 'Mở lại video gần nhất trong chế độ này';
+  lv.onclick = () => {
+    const savedIdx = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
+    if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < allData.length) {
+      openModal(savedIdx);
+    } else if (allData.length > 0) {
+      openModal(0);
     }
+  };
+  cont.appendChild(lv);
 
-    // Nút Trang kế (›)
-    const next = document.createElement('button');
-    next.textContent = '›';
-    next.className = 'nav-arrow';
-    next.title = 'Trang sau';
-    next.onclick = () => goToPage(currentPage + 1);
-    cont.appendChild(next);
+  // Nút Random Video
+  const rnd = document.createElement('button');
+  rnd.textContent = '🎲 Random';
+  rnd.className = 'random-btn';
+  rnd.title = 'Phát ngẫu nhiên 1 video';
+  rnd.onclick = playRandomVideo;
+  cont.appendChild(rnd);
 
-    const lp = document.createElement('button');
-    lp.textContent = 'Cuối';
-    lp.title = 'Tới trang cuối cùng';
-    lp.onclick = () => goToPage(total);
-    cont.appendChild(lp);
+  cont.appendChild(document.createElement('div')).style.width = '10px';
 
-    // Nút Tiếp tục xem (Last Video)
-    const lv = document.createElement('button');
-    lv.textContent = '▶ Xem tiếp';
-    lv.title = 'Mở lại video gần nhất trong chế độ này';
-    lv.onclick = () => {
-      const savedIdx = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
-      if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < allData.length) {
-        openModal(savedIdx);
-      } else if (allData.length > 0) {
-        openModal(0);
-      }
-    };
-    cont.appendChild(lv);
+  const lbl = document.createElement('span');
+  lbl.textContent = 'Xóa đã xem:';
+  lbl.style.color = '#777'; lbl.style.fontSize = '13px';
+  cont.appendChild(lbl);
 
-    // Nút Random Video
-    const rnd = document.createElement('button');
-    rnd.textContent = '🎲 Random';
-    rnd.className = 'random-btn';
-    rnd.title = 'Phát ngẫu nhiên 1 video';
-    rnd.onclick = playRandomVideo;
-    cont.appendChild(rnd);
+  const b1h = document.createElement('button');
+  b1h.textContent = '1h'; b1h.onclick = () => clearViewedWithinLast(60*60*1000);
+  cont.appendChild(b1h);
 
-    cont.appendChild(document.createElement('div')).style.width = '10px';
+  const b1d = document.createElement('button');
+  b1d.textContent = '1d'; b1d.onclick = () => clearViewedWithinLast(24*60*60*1000);
+  cont.appendChild(b1d);
 
-    const lbl = document.createElement('span');
-    lbl.textContent = 'Xóa đã xem:';
-    lbl.style.color = '#777'; lbl.style.fontSize = '13px';
-    cont.appendChild(lbl);
+  const ball = document.createElement('button');
+  ball.textContent = 'Tất cả'; ball.style.background = '#5f1515';
+  ball.onclick = clearAllViewed;
+  cont.appendChild(ball);
 
-    const b1h = document.createElement('button');
-    b1h.textContent = '1h'; b1h.onclick = () => clearViewedWithinLast(60*60*1000);
-    cont.appendChild(b1h);
-
-    const b1d = document.createElement('button');
-    b1d.textContent = '1d'; b1d.onclick = () => clearViewedWithinLast(24*60*60*1000);
-    cont.appendChild(b1d);
-
-    const ball = document.createElement('button');
-    ball.textContent = 'Tất cả'; ball.style.background = '#5f1515';
-    ball.onclick = clearAllViewed;
-    cont.appendChild(ball);
-
-    const cc = document.createElement('button');
-    cc.textContent = 'F5 Cache'; cc.className = 'clear-cache';
-    cc.onclick = () => { if (confirm('Xoá cache dữ liệu và tải lại?')) location.reload(true); };
-    cont.appendChild(cc);
-  });
+  const cc = document.createElement('button');
+  cc.textContent = 'F5 Cache'; cc.className = 'clear-cache';
+  cc.onclick = () => { if (confirm('Xoá cache dữ liệu và tải lại?')) location.reload(true); };
+  cont.appendChild(cc);
 }
 
 function goToPage(p) {
