@@ -11,7 +11,7 @@
     * { margin:0; padding:0; box-sizing:border-box; }
     body { background:#0a0a0c; color:#eee; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
     
-    /* ── HEADER & MODE SWITCHER (KHÔNG STICKY, CUỘN TỰ NHIÊN) ── */
+    /* ── HEADER & MODE SWITCHER (CUỘN TỰ NHIÊN) ── */
     #header-bar {
       position: relative;
       background: rgba(13, 14, 18, 0.96);
@@ -89,37 +89,39 @@
       font-weight: bold;
     }
 
-    /* ── CHỈ GHIM NÚT HOME, BACK, NEXT (TỐI GIẢN, KHÔNG NỀN ĐEN TRÀN MÀN HÌNH) ── */
-    #sticky-nav {
-      position: sticky;
-      top: 8px;
-      z-index: 90;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+    /* ── 3 NÚT TRÔI XUỐNG KHI CUỘN TRANG (HOME, BACK, NEXT) ── */
+    #floating-nav {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-60px);
+      opacity: 0;
       pointer-events: none;
-      background: transparent;
-      margin-bottom: 4px;
-      height: 0;
+      z-index: 99;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
     }
-    .sticky-pill {
+    #floating-nav.visible {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .floating-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: rgba(16, 18, 26, 0.9);
+      background: rgba(16, 18, 26, 0.92);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.22);
       padding: 5px 8px;
       border-radius: 30px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-      pointer-events: auto;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.65);
     }
-    .sticky-btn {
+    .floating-btn {
       background: #202432;
       color: #eee;
       border: 1px solid rgba(255, 255, 255, 0.12);
-      padding: 7px 13px;
+      padding: 7px 14px;
       border-radius: 20px;
       cursor: pointer;
       font-size: 13.5px;
@@ -130,30 +132,101 @@
       transition: all 0.2s ease;
       user-select: none;
     }
-    .sticky-btn:hover {
+    .floating-btn:hover {
       background: #2e3549;
       border-color: rgba(255, 255, 255, 0.3);
       color: #fff;
     }
-    .sticky-btn.btn-home {
+    .floating-btn.btn-home {
       background: rgba(255, 255, 255, 0.08);
       color: #e2e8f0;
       border: none;
     }
-    .sticky-btn.btn-home strong {
+    .floating-btn.btn-home strong {
       color: #4da6ff;
     }
-    .sticky-btn.btn-next {
+    .floating-btn.btn-next {
       background: linear-gradient(135deg, #1e90ff, #00d2d3);
       color: #fff;
       border: none;
       box-shadow: 0 2px 8px rgba(0, 210, 211, 0.35);
     }
-    .sticky-btn.btn-next:hover {
+    .floating-btn.btn-next:hover {
       filter: brightness(1.12);
     }
 
-    /* ── GALLERY & THUMBNAILS (FULL THUMBNAIL, BỎ NỀN ĐEN DƯỚI TIÊU ĐỀ) ── */
+    /* ── THANH PHÂN TRANG ĐẦY ĐỦ (NỀN TRONG SUỐT, KHÔNG NỀN ĐEN DƯỚI TIÊU ĐỀ) ── */
+    .pagination {
+      text-align: center;
+      padding: 10px 8px;
+      background: transparent; /* BỎ NỀN ĐEN Ở DƯỚI TIÊU ĐỀ */
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px;
+      align-items: center;
+    }
+    .pagination button, .pagination input {
+      background: #1b1e28;
+      color: #eee;
+      border: 1px solid #282d3c;
+      padding: 8px 12px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 14.5px;
+      font-weight: 600;
+      min-width: 42px;
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .pagination button:hover { background: #2f3547; border-color: #4a536e; }
+    .pagination button.current {
+      background: linear-gradient(135deg, #1e90ff, #00d2d3);
+      color: white;
+      font-weight: bold;
+      border-color: transparent;
+      box-shadow: 0 2px 8px rgba(0, 210, 211, 0.35);
+    }
+    .pagination button.nav-arrow {
+      font-size: 18px;
+      font-weight: bold;
+      min-width: 48px;
+      padding: 8px 14px;
+    }
+    .pagination button.ellipsis { background: transparent; border: none; cursor: default; color: #666; min-width: 20px; }
+    .pagination button.clear-cache { background: #5f1515; border-color: #832020; }
+    .pagination button.clear-cache:hover { background: #861e1e; }
+    .pagination button.random-btn {
+      background: #1b1e28;
+      border-color: #3e4456;
+      font-weight: bold;
+    }
+    .pagination button.random-btn:hover {
+      background: #2a3042;
+      border-color: #5a6480;
+    }
+    #page-title {
+      cursor: pointer;
+      padding: 8px 14px;
+      background: #1f2330;
+      border: 1px solid #2e3447;
+      border-radius: 7px;
+      min-width: 140px;
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      color: #ced6e0;
+    }
+    #page-title:hover { background: #2c3244; color: #fff; }
+
+    /* ── GALLERY & THUMBNAILS (FULL THUMBNAIL TỰ NHIÊN, BỎ NỀN ĐEN DƯỚI TIÊU ĐỀ) ── */
     #gallery { display: flex; width: 100%; padding: 8px; gap: 8px; min-height: 50vh; }
     .column { flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .thumbnail {
@@ -232,77 +305,6 @@
       opacity: 0.95;
       filter: brightness(1);
     }
-
-    /* ── PHÂN TRANG ĐẦY ĐỦ Ở CUỐI TRANG ── */
-    .pagination {
-      text-align: center;
-      padding: 18px 8px 36px;
-      background: #0a0a0c;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 6px;
-      align-items: center;
-    }
-    .pagination button, .pagination input {
-      background: #1b1e28;
-      color: #eee;
-      border: 1px solid #282d3c;
-      padding: 8px 12px;
-      border-radius: 7px;
-      cursor: pointer;
-      font-size: 14.5px;
-      font-weight: 600;
-      min-width: 42px;
-      min-height: 38px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-      user-select: none;
-    }
-    .pagination button:hover { background: #2f3547; border-color: #4a536e; }
-    .pagination button.current {
-      background: linear-gradient(135deg, #1e90ff, #00d2d3);
-      color: white;
-      font-weight: bold;
-      border-color: transparent;
-      box-shadow: 0 2px 8px rgba(0, 210, 211, 0.35);
-    }
-    .pagination button.nav-arrow {
-      font-size: 18px;
-      font-weight: bold;
-      min-width: 48px;
-      padding: 8px 14px;
-    }
-    .pagination button.ellipsis { background: transparent; border: none; cursor: default; color: #666; min-width: 20px; }
-    .pagination button.clear-cache { background: #5f1515; border-color: #832020; }
-    .pagination button.clear-cache:hover { background: #861e1e; }
-    .pagination button.random-btn {
-      background: #1b1e28;
-      border-color: #3e4456;
-      font-weight: bold;
-    }
-    .pagination button.random-btn:hover {
-      background: #2a3042;
-      border-color: #5a6480;
-    }
-    #page-title {
-      cursor: pointer;
-      padding: 8px 14px;
-      background: #1f2330;
-      border: 1px solid #2e3447;
-      border-radius: 7px;
-      min-width: 140px;
-      min-height: 38px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 14px;
-      color: #ced6e0;
-    }
-    #page-title:hover { background: #2c3244; color: #fff; }
 
     /* ── LOADING & ERROR STATE ── */
     .state-box {
@@ -412,7 +414,6 @@
     #controls button.active {
       border-color: #4da6ff;
       color: #4da6ff;
-      opacity: 1;
       box-shadow: 0 0 10px rgba(77, 166, 255, 0.4);
     }
     
@@ -482,7 +483,7 @@
 </head>
 <body>
 
-<!-- ── HEADER & 2 CHẾ ĐỘ XEM (KHÔNG STICKY, CUỘN TỰ NHIÊN) ── -->
+<!-- ── HEADER & 2 CHẾ ĐỘ XEM (CUỘN TỰ NHIÊN) ── -->
 <header id="header-bar">
   <div class="header-brand" onclick="location.href='?'">
     <span class="brand-logo">🐰</span>
@@ -505,19 +506,22 @@
   </div>
 </header>
 
-<!-- ── CHỈ GHIM 3 NÚT: HOME, BACK, NEXT (TỐI GIẢN, KHÔNG NỀN ĐEN TRÀN MÀN HÌNH) ── -->
-<nav id="sticky-nav">
-  <div class="sticky-pill">
-    <button class="sticky-btn" id="sticky-btn-back" onclick="goToPage(currentPage - 1)" title="Trang trước (‹)">‹ Back</button>
-    <button class="sticky-btn btn-home" onclick="goToPage(1)" title="Về trang đầu (Home)">🏠 Trang <strong id="sticky-curr">1</strong>/<span id="sticky-total">1</span></button>
-    <button class="sticky-btn btn-next" id="sticky-btn-next" onclick="goToPage(currentPage + 1)" title="Trang sau (›)">Next ›</button>
-  </div>
-</nav>
+<!-- ── ĐẦY ĐỦ CÁC NÚT CHỨC NĂNG Ở ĐẦU TRANG (NỀN TRONG SUỐT, KHÔNG NỀN ĐEN DƯỚI TIÊU ĐỀ) ── -->
+<div class="pagination" id="top-pagination"></div>
 
-<!-- ── GALLERY LƯỚI VIDEO (FULL THUMBNAIL, KHÔNG NỀN ĐEN DƯỚI TIÊU ĐỀ) ── -->
+<!-- ── CHỈ CÓ MỖI 3 NÚT NÀY TRÔI XUỐNG KHI CUỘN TRANG (HOME, BACK, NEXT) ── -->
+<div id="floating-nav">
+  <div class="floating-pill">
+    <button class="floating-btn" id="f-btn-back" onclick="goToPage(currentPage - 1)" title="Trang trước (‹)">‹ Back</button>
+    <button class="floating-btn btn-home" onclick="goToPage(1)" title="Về trang đầu (Home)">🏠 Trang <strong id="f-curr-page">1</strong>/<span id="f-total-page">1</span></button>
+    <button class="floating-btn btn-next" id="f-btn-next" onclick="goToPage(currentPage + 1)" title="Trang sau (›)">Next ›</button>
+  </div>
+</div>
+
+<!-- ── GALLERY LƯỚI VIDEO (FULL THUMBNAIL TỰ NHIÊN, BỎ NỀN ĐEN DƯỚI TIÊU ĐỀ) ── -->
 <div id="gallery"></div>
 
-<!-- ── PHÂN TRANG ĐẦY ĐỦ Ở CUỐI TRANG (KHÔNG BỊ GHIM LÀM TRÀN MÀN HÌNH) ── -->
+<!-- ── ĐẦY ĐỦ CÁC NÚT CHỨC NĂNG Ở CUỐI TRANG ── -->
 <div class="pagination" id="bottom-pagination"></div>
 
 <!-- ── MODAL PLAYER (XEM VIDEO SIÊU TỐC) ── -->
@@ -1009,146 +1013,147 @@ function clearAllViewed() {
   }
 }
 
-// ── CẬP NHẬT PHÂN TRANG (CẬP NHẬT 3 NÚT GHIM & PHÂN TRANG DƯỚI) ──
+// ── PHÂN TRANG (CẬP NHẬT ĐẦY ĐỦ 2 ĐẦU VÀ 3 NÚT TRÔI XUỐNG) ──
 function renderPagination() {
   const total = getTotalPages();
   const modeLabel = currentMode === 'likes' ? 'Top Like' : 'Mới Nhất';
 
-  // 1. Cập nhật thanh ghim gọn nhẹ 3 nút (Home, Back, Next)
-  const stickyCurr = document.getElementById('sticky-curr');
-  const stickyTotal = document.getElementById('sticky-total');
-  const stickyBack = document.getElementById('sticky-btn-back');
-  const stickyNext = document.getElementById('sticky-btn-next');
+  // 1. Cập nhật 3 nút trôi xuống (floating nav: Back, Home, Next)
+  const fCurr = document.getElementById('f-curr-page');
+  const fTotal = document.getElementById('f-total-page');
+  const fBack = document.getElementById('f-btn-back');
+  const fNext = document.getElementById('f-btn-next');
 
-  if (stickyCurr) stickyCurr.textContent = currentPage;
-  if (stickyTotal) stickyTotal.textContent = total;
+  if (fCurr) fCurr.textContent = currentPage;
+  if (fTotal) fTotal.textContent = total;
 
-  if (stickyBack) {
-    stickyBack.disabled = (currentPage <= 1);
-    stickyBack.style.opacity = (currentPage <= 1) ? '0.35' : '1';
-    stickyBack.style.cursor = (currentPage <= 1) ? 'not-allowed' : 'pointer';
+  if (fBack) {
+    fBack.disabled = (currentPage <= 1);
+    fBack.style.opacity = (currentPage <= 1) ? '0.35' : '1';
+    fBack.style.cursor = (currentPage <= 1) ? 'not-allowed' : 'pointer';
   }
-  if (stickyNext) {
-    stickyNext.disabled = (currentPage >= total);
-    stickyNext.style.opacity = (currentPage >= total) ? '0.35' : '1';
-    stickyNext.style.cursor = (currentPage >= total) ? 'not-allowed' : 'pointer';
+  if (fNext) {
+    fNext.disabled = (currentPage >= total);
+    fNext.style.opacity = (currentPage >= total) ? '0.35' : '1';
+    fNext.style.cursor = (currentPage >= total) ? 'not-allowed' : 'pointer';
   }
 
-  // 2. Cập nhật phân trang đầy đủ ở đáy trang (#bottom-pagination)
-  const cont = document.getElementById('bottom-pagination');
-  if (!cont) return;
-  cont.innerHTML = '';
-  
-  // Nút Trang trước (‹)
-  const prev = document.createElement('button');
-  prev.textContent = '‹';
-  prev.className = 'nav-arrow';
-  prev.title = 'Trang trước';
-  prev.onclick = () => goToPage(currentPage - 1);
-  cont.appendChild(prev);
+  // 2. Cập nhật đầy đủ các nút ở 2 thanh phân trang (trên và dưới)
+  [document.getElementById('top-pagination'), document.getElementById('bottom-pagination')].forEach(cont => {
+    if (!cont) return;
+    cont.innerHTML = '';
+    
+    // Nút Trang trước (‹)
+    const prev = document.createElement('button');
+    prev.textContent = '‹';
+    prev.className = 'nav-arrow';
+    prev.title = 'Trang trước';
+    prev.onclick = () => goToPage(currentPage - 1);
+    cont.appendChild(prev);
 
-  // Tiêu đề trang (Bấm vào để về trang 1 hoặc nhảy trang)
-  const title = document.createElement('span');
-  title.id = 'page-title';
-  title.textContent = `${modeLabel}: Trang ${currentPage} / ${total}`;
-  title.onclick = () => { if (currentPage !== 1) goToPage(1, true); };
-  cont.appendChild(title);
+    // Tiêu đề trang (Bấm vào để về trang 1 hoặc nhảy trang)
+    const title = document.createElement('span');
+    title.id = 'page-title';
+    title.textContent = `${modeLabel}: Trang ${currentPage} / ${total}`;
+    title.onclick = () => { if (currentPage !== 1) goToPage(1, true); };
+    cont.appendChild(title);
 
-  // Ô nhập trang
-  const inp = document.createElement('input');
-  inp.type = 'number';
-  inp.min = 1; inp.max = total; inp.value = currentPage;
-  inp.style.width = '64px'; inp.style.textAlign = 'center';
-  cont.appendChild(inp);
+    // Ô nhập trang
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min = 1; inp.max = total; inp.value = currentPage;
+    inp.style.width = '64px'; inp.style.textAlign = 'center';
+    cont.appendChild(inp);
 
-  const goBtn = document.createElement('button');
-  goBtn.textContent = 'Go';
-  goBtn.onclick = () => goToPage(parseInt(inp.value) || 1);
-  cont.appendChild(goBtn);
+    const goBtn = document.createElement('button');
+    goBtn.textContent = 'Go';
+    goBtn.onclick = () => goToPage(parseInt(inp.value) || 1);
+    cont.appendChild(goBtn);
 
-  const range = 2;
-  let s = Math.max(1, currentPage - range);
-  let e = Math.min(total, currentPage + range);
-  if (s > 1) {
-    const b = document.createElement('button'); b.textContent = '1'; b.onclick = () => goToPage(1); cont.appendChild(b);
-    if (s > 2) {
-      const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
+    const range = 2;
+    let s = Math.max(1, currentPage - range);
+    let e = Math.min(total, currentPage + range);
+    if (s > 1) {
+      const b = document.createElement('button'); b.textContent = '1'; b.onclick = () => goToPage(1); cont.appendChild(b);
+      if (s > 2) {
+        const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
+      }
     }
-  }
-  for (let p = s; p <= e; p++) {
-    const b = document.createElement('button');
-    b.textContent = p;
-    if (p === currentPage) b.classList.add('current');
-    b.onclick = () => goToPage(p);
-    cont.appendChild(b);
-  }
-  if (e < total) {
-    if (e < total - 1) {
-      const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
+    for (let p = s; p <= e; p++) {
+      const b = document.createElement('button');
+      b.textContent = p;
+      if (p === currentPage) b.classList.add('current');
+      b.onclick = () => goToPage(p);
+      cont.appendChild(b);
     }
-    const b = document.createElement('button'); b.textContent = total; b.onclick = () => goToPage(total); cont.appendChild(b);
-  }
-
-  // Nút Trang kế (›)
-  const next = document.createElement('button');
-  next.textContent = '›';
-  next.className = 'nav-arrow';
-  next.title = 'Trang sau';
-  next.onclick = () => goToPage(currentPage + 1);
-  cont.appendChild(next);
-
-  const lp = document.createElement('button');
-  lp.textContent = 'Cuối';
-  lp.title = 'Tới trang cuối cùng';
-  lp.onclick = () => goToPage(total);
-  cont.appendChild(lp);
-
-  // Nút Tiếp tục xem (Last Video)
-  const lv = document.createElement('button');
-  lv.textContent = '▶ Xem tiếp';
-  lv.title = 'Mở lại video gần nhất trong chế độ này';
-  lv.onclick = () => {
-    const savedIdx = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
-    if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < allData.length) {
-      openModal(savedIdx);
-    } else if (allData.length > 0) {
-      openModal(0);
+    if (e < total) {
+      if (e < total - 1) {
+        const el = document.createElement('button'); el.textContent = '...'; el.className = 'ellipsis'; cont.appendChild(el);
+      }
+      const b = document.createElement('button'); b.textContent = total; b.onclick = () => goToPage(total); cont.appendChild(b);
     }
-  };
-  cont.appendChild(lv);
 
-  // Nút Random Video
-  const rnd = document.createElement('button');
-  rnd.textContent = '🎲 Random';
-  rnd.className = 'random-btn';
-  rnd.title = 'Phát ngẫu nhiên 1 video';
-  rnd.onclick = playRandomVideo;
-  cont.appendChild(rnd);
+    // Nút Trang kế (›)
+    const next = document.createElement('button');
+    next.textContent = '›';
+    next.className = 'nav-arrow';
+    next.title = 'Trang sau';
+    next.onclick = () => goToPage(currentPage + 1);
+    cont.appendChild(next);
 
-  cont.appendChild(document.createElement('div')).style.width = '10px';
+    const lp = document.createElement('button');
+    lp.textContent = 'Cuối';
+    lp.title = 'Tới trang cuối cùng';
+    lp.onclick = () => goToPage(total);
+    cont.appendChild(lp);
 
-  const lbl = document.createElement('span');
-  lbl.textContent = 'Xóa đã xem:';
-  lbl.style.color = '#777'; lbl.style.fontSize = '13px';
-  cont.appendChild(lbl);
+    // Nút Tiếp tục xem (Last Video)
+    const lv = document.createElement('button');
+    lv.textContent = '▶ Xem tiếp';
+    lv.title = 'Mở lại video gần nhất trong chế độ này';
+    lv.onclick = () => {
+      const savedIdx = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
+      if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < allData.length) {
+        openModal(savedIdx);
+      } else if (allData.length > 0) {
+        openModal(0);
+      }
+    };
+    cont.appendChild(lv);
 
-  const b1h = document.createElement('button');
-  b1h.textContent = '1h'; b1h.onclick = () => clearViewedWithinLast(60*60*1000);
-  cont.appendChild(b1h);
+    // Nút Random Video
+    const rnd = document.createElement('button');
+    rnd.textContent = '🎲 Random';
+    rnd.className = 'random-btn';
+    rnd.title = 'Phát ngẫu nhiên 1 video';
+    rnd.onclick = playRandomVideo;
+    cont.appendChild(rnd);
 
-  const b1d = document.createElement('button');
-  b1d.textContent = '1d'; b1d.onclick = () => clearViewedWithinLast(24*60*60*1000);
-  cont.appendChild(b1d);
+    cont.appendChild(document.createElement('div')).style.width = '10px';
 
-  const ball = document.createElement('button');
-  ball.textContent = 'Tất cả'; ball.style.background = '#5f1515';
-  ball.onclick = clearAllViewed;
-  cont.appendChild(ball);
+    const lbl = document.createElement('span');
+    lbl.textContent = 'Xóa đã xem:';
+    lbl.style.color = '#777'; lbl.style.fontSize = '13px';
+    cont.appendChild(lbl);
 
-  const cc = document.createElement('button');
-  cc.textContent = 'F5 Cache'; cc.className = 'clear-cache';
-  cc.onclick = () => { if (confirm('Xoá cache dữ liệu và tải lại?')) location.reload(true); };
-  cont.appendChild(cc);
+    const b1h = document.createElement('button');
+    b1h.textContent = '1h'; b1h.onclick = () => clearViewedWithinLast(60*60*1000);
+    cont.appendChild(b1h);
+
+    const b1d = document.createElement('button');
+    b1d.textContent = '1d'; b1d.onclick = () => clearViewedWithinLast(24*60*60*1000);
+    cont.appendChild(b1d);
+
+    const ball = document.createElement('button');
+    ball.textContent = 'Tất cả'; ball.style.background = '#5f1515';
+    ball.onclick = clearAllViewed;
+    cont.appendChild(ball);
+
+    const cc = document.createElement('button');
+    cc.textContent = 'F5 Cache'; cc.className = 'clear-cache';
+    cc.onclick = () => { if (confirm('Xoá cache dữ liệu và tải lại?')) location.reload(true); };
+    cont.appendChild(cc);
+  });
 }
 
 function goToPage(p) {
@@ -1161,6 +1166,18 @@ function goToPage(p) {
   localStorage.setItem(`lastPage_${currentMode}`, currentPage);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+// ── HIỆU ỨNG 3 NÚT TRÔI XUỐNG KHI CUỘN TRANG ──
+window.addEventListener('scroll', () => {
+  const fNav = document.getElementById('floating-nav');
+  if (!fNav) return;
+  // Khi cuộn xuống quá 90px (đã qua header & toolbar trên) -> 3 nút trôi xuống
+  if (window.scrollY > 90) {
+    fNav.classList.add('visible');
+  } else {
+    fNav.classList.remove('visible');
+  }
+}, { passive: true });
 
 // ── TELEGRAM SHARE / LƯU ──
 function sendToTelegram() {
