@@ -2,7 +2,7 @@ name: Anhmoe Top Likes Video Scraper
 
 on:
   schedule:
-    - cron: '0 4 * * *'  # Chạy định kỳ mỗi ngày 1 lần lúc 04:00 UTC (11:00 trưa giờ VN)
+    - cron: '0 8 * * *'  # Chạy hàng ngày lúc 08:00 UTC (15:00 chiều giờ VN)
   workflow_dispatch:
     inputs:
       pages:
