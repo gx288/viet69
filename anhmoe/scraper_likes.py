@@ -68,8 +68,10 @@ def normalize_url(url):
 def write_json(all_data):
     path = Path(JSON_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
+    tmp_path = path.with_suffix('.tmp')
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(all_data, f, ensure_ascii=False, indent=2)
+    tmp_path.replace(path)
     sz = path.stat().st_size / 1024 / 1024
     print(f"💾 Đã lưu thành công {len(all_data):,} video vào {JSON_PATH} ({sz:.2f} MB)")
 
