@@ -219,6 +219,18 @@
       background: #2a3042;
       border-color: #5a6480;
     }
+    .pagination button.resume-btn {
+      background: rgba(0, 210, 211, 0.15);
+      border-color: rgba(0, 210, 211, 0.6);
+      color: #00d2d3;
+      font-weight: bold;
+    }
+    .pagination button.resume-btn:hover {
+      background: rgba(0, 210, 211, 0.32);
+      border-color: #00d2d3;
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(0, 210, 211, 0.4);
+    }
     #page-title {
       cursor: pointer;
       padding: 8px 14px;
@@ -314,6 +326,33 @@
     .watched:hover img {
       opacity: 0.95;
       filter: brightness(1);
+    }
+
+    /* ── ĐÁNH DẤU VỊ TRÍ VIDEO LẦN CUỐI XEM (VỪA XEM DỞ) ── */
+    .thumbnail.last-viewed {
+      border: 2px solid #00d2d3;
+      box-shadow: 0 0 14px rgba(0, 210, 211, 0.45);
+      position: relative;
+    }
+    .thumbnail.last-viewed::before {
+      content: "▶ Vừa xem";
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      background: rgba(0, 210, 211, 0.95);
+      color: #051414;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 7px;
+      border-radius: 10px;
+      line-height: 1;
+      z-index: 3;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+    }
+    .thumbnail.last-viewed img {
+      opacity: 0.95 !important;
+      filter: brightness(1) !important;
     }
 
     /* ── LOADING & ERROR STATE ── */
@@ -704,6 +743,7 @@ let currentRotation = 0;
 let wakeLock = null;
 let currentThumbnailTop = 0;
 let isSwitchingPage = false;
+let isCurrentVideoRandom = false;
 
 const player = document.getElementById('video-player');
 const modal = document.getElementById('modal');
@@ -857,14 +897,15 @@ async function loadModeData(mode) {
   dataStatusBadge.textContent = `${allData.length.toLocaleString()} video`;
 
   const urlParams = new URLSearchParams(window.location.search);
+  const urlMode = urlParams.get('mode');
   const urlPage = parseInt(urlParams.get('p'));
   const total = getTotalPages();
   const savedPage = parseInt(localStorage.getItem(`lastPage_${mode}`)) || 1;
 
-  if (urlPage && urlPage >= 1 && urlPage <= total) {
+  if (urlMode === mode && urlPage && urlPage >= 1 && urlPage <= total) {
     currentPage = urlPage;
   } else {
-    currentPage = Math.min(savedPage, total);
+    currentPage = Math.min(Math.max(1, savedPage), total);
   }
 
   renderGallery();
@@ -872,9 +913,15 @@ async function loadModeData(mode) {
   updateURL();
 }
 
-// Chuyển đổi giữa 2 chế độ
+// Chuyển đổi giữa 2 chế độ (Xoá param p của mode cũ để khôi phục đúng lastPage của mode mới)
 function switchMode(newMode) {
   if (newMode === currentMode && allData.length > 0) return;
+  const url = new URL(window.location);
+  if (url.searchParams.get('mode') !== newMode) {
+    url.searchParams.delete('p');
+    url.searchParams.set('mode', newMode);
+    window.history.replaceState({}, '', url);
+  }
   loadModeData(newMode);
 }
 
@@ -907,6 +954,9 @@ function renderGallery() {
   const rightColumn = document.createElement('div');
   rightColumn.className = 'column';
 
+  const savedLastVideoId = localStorage.getItem(`lastVideoId_${currentMode}`);
+  const savedLastIndex = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
+
   items.forEach((item, i) => {
     const idx = start + i;
     const div = document.createElement('div');
@@ -919,6 +969,13 @@ function renderGallery() {
       div.classList.add('watched');
     }
 
+    // ĐÁNH DẤU VỊ TRÍ VIDEO LẦN CUỐI XEM (VỪA XEM DỞ)
+    const isLastWatched = (savedLastVideoId && (item.id === savedLastVideoId || extractVideoId(item.video_url) === savedLastVideoId)) ||
+                          (!savedLastVideoId && !isNaN(savedLastIndex) && idx === savedLastIndex);
+    if (isLastWatched) {
+      div.classList.add('last-viewed');
+    }
+
     const dur = formatDuration(item.duration);
     div.innerHTML = `
       <img src="${item.thumb_url}" loading="lazy" alt="${item.title || 'video'}">
@@ -927,7 +984,7 @@ function renderGallery() {
     `;
     div.addEventListener('click', () => {
       modalNavigationHistory = [];
-      openModal(idx);
+      openModal(idx, false);
     });
     (i % 2 === 0 ? leftColumn : rightColumn).appendChild(div);
   });
@@ -951,25 +1008,37 @@ function scrollToCurrentThumbnail() {
 }
 
 // ── MỞ MODAL & ĐÁNH DẤU ĐÃ XEM BẰNG ID ──
-function openModal(idx) {
+function openModal(idx, isRandom = false) {
   if (idx < 0 || idx >= allData.length) return;
 
+  isCurrentVideoRandom = !!isRandom;
+
+  // Nếu là xem ngẫu nhiên (Random):
+  // KHÔNG đổi trang gallery bên dưới, phát video ngay lập tức
+  if (isRandom) {
+    doOpenModal(idx, true);
+    return;
+  }
+
+  // Xem tuần tự bình thường:
+  // Nếu video ở trang khác thì chuyển gallery đến đúng trang của video đó
   const targetPage = Math.floor(idx / ITEMS_PER_PAGE) + 1;
   if (targetPage !== currentPage) {
     isSwitchingPage = true;
     goToPage(targetPage);
     setTimeout(() => {
       isSwitchingPage = false;
-      doOpenModal(idx);
+      doOpenModal(idx, false);
     }, 120);
     return;
   }
 
-  doOpenModal(idx);
+  doOpenModal(idx, false);
 }
 
-function doOpenModal(idx) {
+function doOpenModal(idx, isRandom = false) {
   currentVideoIndex = idx;
+  isCurrentVideoRandom = !!isRandom;
   currentRotation = 0;
   updateVideoRotationAndScale();
   
@@ -987,31 +1056,53 @@ function doOpenModal(idx) {
   modal.style.display = 'flex';
   if (!player.paused) requestWakeLock();
 
-  setTimeout(scrollToCurrentThumbnail, 150);
+  if (!isRandom) {
+    setTimeout(scrollToCurrentThumbnail, 150);
+  }
   resetIdleTimer();
 
-  player.onended = nextVideoByPosition;
+  player.onended = isRandom ? playRandomVideo : nextVideoByPosition;
   videoTitle.textContent = videoItem.title || 'Video không tên';
   videoTitle.style.display = 'block';
   const dur = formatDuration(videoItem.duration);
   videoDuration.textContent = dur ? `Thời lượng: ${dur}` : '';
   videoDuration.style.display = dur ? 'block' : 'none';
 
-  // ĐÁNH DẤU ĐÃ XEM THEO ID VIDEO
+  if (isRandom) {
+    videoModeBadge.textContent = '🎲 Ngẫu nhiên';
+    videoModeBadge.style.background = 'rgba(155, 89, 182, 0.55)';
+  } else {
+    updateModeButtonsUI();
+  }
+
+  // ĐÁNH DẤU ĐÃ XEM THEO ID VIDEO (LUÔN LUÔN CHẠY KỂ CẢ XEM RANDOM)
   const vidId = videoItem.id || extractVideoId(videoItem.video_url);
   if (vidId) {
     viewedMap[vidId] = Date.now();
     localStorage.setItem(VIEWED_BY_ID_KEY, JSON.stringify(viewedMap));
   }
 
-  // Cập nhật trạng thái thumbnail trên giao diện
-  const thumbElem = document.querySelector(`.thumbnail[data-index="${idx}"]`);
+  // Cập nhật trạng thái thumbnail đã xem trên giao diện (nếu thumbnail có trong trang hiện tại)
+  const thumbElem = document.querySelector(`.thumbnail[data-videoId="${vidId}"], .thumbnail[data-index="${idx}"]`);
   if (thumbElem) {
     thumbElem.classList.add('watched');
   }
 
-  localStorage.setItem(`lastPage_${currentMode}`, currentPage);
-  localStorage.setItem(`lastIndex_${currentMode}`, idx);
+  // NẾU XEM RANDOM: TUYỆT ĐỐI KHÔNG TÍNH LÀ LẦN CUỐI XEM (KHÔNG LƯU VỊ TRÍ, KHÔNG LƯU PAGE)
+  if (!isRandom) {
+    const videoPage = Math.floor(idx / ITEMS_PER_PAGE) + 1;
+    localStorage.setItem(`lastPage_${currentMode}`, videoPage);
+    localStorage.setItem(`lastIndex_${currentMode}`, idx);
+    if (vidId) {
+      localStorage.setItem(`lastVideoId_${currentMode}`, vidId);
+    }
+
+    // Cập nhật khung viền & nhãn "Vừa xem" cho thumbnail
+    document.querySelectorAll('.thumbnail.last-viewed').forEach(el => el.classList.remove('last-viewed'));
+    if (thumbElem) {
+      thumbElem.classList.add('last-viewed');
+    }
+  }
 }
 
 function closeModal() {
@@ -1027,6 +1118,8 @@ function closeModal() {
     idleTimer = null;
   }
   modalNavigationHistory = [];
+  isCurrentVideoRandom = false;
+  updateModeButtonsUI();
   videoTitle.textContent = '';
   videoTitle.style.display = 'none';
   videoDuration.textContent = '';
@@ -1073,10 +1166,12 @@ function getVisualCandidates() {
 // Lịch sử điều hướng trong modal (để vuốt ngược lại luôn về đúng video vừa xem)
 let modalNavigationHistory = [];
 
-function recordNavigationHistory(idx) {
+function recordNavigationHistory(idx, wasRandom = isCurrentVideoRandom) {
   if (idx === undefined || idx === null || idx < 0) return;
-  if (modalNavigationHistory.length === 0 || modalNavigationHistory[modalNavigationHistory.length - 1] !== idx) {
-    modalNavigationHistory.push(idx);
+  const lastEntry = modalNavigationHistory[modalNavigationHistory.length - 1];
+  const lastIndex = typeof lastEntry === 'object' ? lastEntry.index : lastEntry;
+  if (modalNavigationHistory.length === 0 || lastIndex !== idx) {
+    modalNavigationHistory.push({ index: idx, isRandom: wasRandom });
     if (modalNavigationHistory.length > 50) {
       modalNavigationHistory.shift();
     }
@@ -1087,6 +1182,12 @@ function recordNavigationHistory(idx) {
 function nextVideoByPosition() {
   if (isSwitchingPage) return;
 
+  // Nếu đang xem ngẫu nhiên: vuốt lên sẽ phát tiếp một video ngẫu nhiên khác
+  if (isCurrentVideoRandom) {
+    playRandomVideo();
+    return;
+  }
+
   const candidates = getVisualCandidates();
   if (candidates.length === 0) return;
 
@@ -1094,14 +1195,14 @@ function nextVideoByPosition() {
 
   if (currentPos !== -1 && currentPos < candidates.length - 1) {
     const nextIndex = candidates[currentPos + 1].index;
-    recordNavigationHistory(currentVideoIndex);
-    openModal(nextIndex);
+    recordNavigationHistory(currentVideoIndex, false);
+    openModal(nextIndex, false);
   } else {
     if (currentPage < getTotalPages()) {
       const nextPage = currentPage + 1;
       const nextPageFirstIdx = (nextPage - 1) * ITEMS_PER_PAGE;
-      recordNavigationHistory(currentVideoIndex);
-      openModal(nextPageFirstIdx);
+      recordNavigationHistory(currentVideoIndex, false);
+      openModal(nextPageFirstIdx, false);
     } else {
       alert("Bạn đã xem hết video trên toàn bộ các trang!");
       closeModal();
@@ -1115,8 +1216,15 @@ function prevVideo() {
 
   // 1. Ưu tiên số 1: Trả về đúng video vừa phát trước đó theo lịch sử lướt
   if (modalNavigationHistory.length > 0) {
-    const prevIndex = modalNavigationHistory.pop();
-    openModal(prevIndex);
+    const prev = modalNavigationHistory.pop();
+    const prevIndex = typeof prev === 'object' ? prev.index : prev;
+    const prevWasRandom = typeof prev === 'object' ? prev.isRandom : false;
+    openModal(prevIndex, prevWasRandom);
+    return;
+  }
+
+  // Nếu đang xem random và không có lịch sử trước đó
+  if (isCurrentVideoRandom) {
     return;
   }
 
@@ -1127,7 +1235,7 @@ function prevVideo() {
     const currentPos = candidates.findIndex(c => c.index === currentVideoIndex);
     if (currentPos > 0) {
       const prevIndex = candidates[currentPos - 1].index;
-      openModal(prevIndex);
+      openModal(prevIndex, false);
       return;
     }
   }
@@ -1136,18 +1244,18 @@ function prevVideo() {
   if (currentPage > 1) {
     const prevPage = currentPage - 1;
     const prevPageLastIdx = prevPage * ITEMS_PER_PAGE - 1;
-    openModal(prevPageLastIdx);
+    openModal(prevPageLastIdx, false);
   }
 }
 
-// ── RANDOM VIDEO ──
+// ── RANDOM VIDEO (KHÔNG TÍNH LÀ LẦN CUỐI XEM, NHƯNG VẪN ĐÁNH DẤU ĐÃ XEM) ──
 function playRandomVideo() {
   if (!allData || allData.length === 0) return;
   const randomIdx = Math.floor(Math.random() * allData.length);
   if (currentVideoIndex >= 0) {
-    recordNavigationHistory(currentVideoIndex);
+    recordNavigationHistory(currentVideoIndex, isCurrentVideoRandom);
   }
-  openModal(randomIdx);
+  openModal(randomIdx, true);
 }
 
 // Cử chỉ cảm ứng vuốt màn hình
@@ -1199,6 +1307,30 @@ function clearAllViewed() {
     localStorage.removeItem(VIEWED_BY_ID_KEY);
     renderGallery();
     alert("Đã xóa toàn bộ lịch sử đánh dấu video!");
+  }
+}
+
+// ── TÌM VÀ KHÔI PHỤC VIDEO LẦN CUỐI XEM ──
+function getResumeIndex() {
+  const savedVideoId = localStorage.getItem(`lastVideoId_${currentMode}`);
+  if (savedVideoId && allData && allData.length > 0) {
+    const foundIdx = allData.findIndex(item => item.id === savedVideoId || extractVideoId(item.video_url) === savedVideoId);
+    if (foundIdx !== -1) {
+      return foundIdx;
+    }
+  }
+  const savedIdx = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
+  if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < allData.length) {
+    return savedIdx;
+  }
+  return (allData && allData.length > 0) ? 0 : -1;
+}
+
+function resumeLastWatchedVideo() {
+  const targetIdx = getResumeIndex();
+  if (targetIdx >= 0 && targetIdx < allData.length) {
+    modalNavigationHistory = [];
+    openModal(targetIdx, false);
   }
 }
 
@@ -1299,15 +1431,9 @@ function renderPagination() {
     // Nút Tiếp tục xem (Last Video)
     const lv = document.createElement('button');
     lv.textContent = '▶ Xem tiếp';
+    lv.className = 'resume-btn';
     lv.title = 'Mở lại video gần nhất trong chế độ này';
-    lv.onclick = () => {
-      const savedIdx = parseInt(localStorage.getItem(`lastIndex_${currentMode}`));
-      if (!isNaN(savedIdx) && savedIdx >= 0 && savedIdx < allData.length) {
-        openModal(savedIdx);
-      } else if (allData.length > 0) {
-        openModal(0);
-      }
-    };
+    lv.onclick = resumeLastWatchedVideo;
     cont.appendChild(lv);
 
     // Nút Random Video
