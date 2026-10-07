@@ -119,7 +119,17 @@ def parse_page_html(html, current_url, page_number):
             data_obj = json.loads(decoded_str)
 
             video_url = data_obj.get('image', {}).get('url') or data_obj.get('url') or ''
-            if not video_url or not is_video_file(video_url):
+            
+            # Chỉ lấy item là video hợp lệ, bỏ qua triệt để ảnh
+            is_vid = False
+            if is_video_file(video_url):
+                is_vid = True
+            elif data_obj.get('type') == 'video':
+                is_vid = True
+            elif (data_obj.get('extension') or '').lower() in ('mp4', 'webm', 'm4v', 'mov', 'mkv'):
+                is_vid = True
+
+            if not video_url or not is_vid:
                 continue
 
             title = data_obj.get('display_title') or data_obj.get('title') or 'Unknown'
@@ -168,6 +178,8 @@ def parse_page_html(html, current_url, page_number):
             next_url = 'https://zpic.org' + href
         elif href.startswith('http'):
             next_url = href
+        else:
+            next_url = 'https://zpic.org/' + href.lstrip('/')
 
     return items, next_url
 
@@ -198,8 +210,14 @@ def scrape_likes(max_pages=None):
 
         items, next_url = parse_page_html(html, current_url, page_number)
         if not items:
-            print(f"ℹ️ Trang {page_number} không có video nào. Đã đến trang cuối.")
-            break
+            print(f"ℹ️ Trang {page_number:3d}: 0 video (trang ảnh/trống). Tiếp tục duyệt trang kế tiếp...", flush=True)
+            if not next_url:
+                print(f"\n🏁 Đã cào tới trang cuối cùng (Trang {page_number}). Hoàn tất duyệt toàn bộ trang!")
+                break
+            current_url = next_url
+            page_number += 1
+            time.sleep(0.15)
+            continue
 
         added_on_page = 0
         for it in items:
