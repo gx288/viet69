@@ -165,12 +165,15 @@ def parse_page_html(html, current_url, page_number):
             norm_image_url = normalize_url(image_url)
             norm_thumb_url = normalize_url(thumb_url)
 
+            view_link = data_obj.get('url_viewer') or data_obj.get('url_short') or ''
+
             items.append({
                 "title": title,
                 "author": author,
                 "dimensions": dimensions,
                 "thumb_url": norm_thumb_url,
                 "image_url": norm_image_url,
+                "view_link": view_link,
                 "page_number": str(page_number),
                 "page_link": current_url,
                 "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S")
