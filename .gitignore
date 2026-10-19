@@ -4,4 +4,13 @@ __pycache__/
 deploy_netlify.py
 anhmoe/deploy_netlify.py
 *.tmp
-
+.session.json
+temp_zpic/
+temp.csv
+temp_videos.csv
+*.mp4
+*.ts
+*.m3u8
+credentials.json
+data/viet69_database.*
+data/data.txt

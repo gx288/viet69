@@ -1,0 +1,75 @@
+name: Daily Top Monthly Video to Xamvn & XamVid
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # Chạy tự động mỗi ngày 1 lần lúc 12:00 trưa giờ Việt Nam (05:00 UTC)
+  workflow_dispatch:
+    inputs:
+      max_posts_per_run:
+        description: 'Số video cần đăng trong lần chạy này (mặc định: 1)'
+        required: false
+        type: string
+        default: '1'
+      limit_per_month:
+        description: 'Số video tối đa mỗi tháng (mặc định: 20)'
+        required: false
+        type: string
+        default: '20'
+
+permissions:
+  contents: write
+
+jobs:
+  post-daily-video:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg curl fonts-dejavu-core
+
+      - name: 📦 Install Python packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🎬 Run Daily Top Video Poster
+        env:
+          XAMVN_USERNAME: ${{ secrets.XAMVN_USERNAME || 'cudai2m' }}
+          XAMVN_PASSWORD: ${{ secrets.XAMVN_PASSWORD || 'lehunghup' }}
+          XAMVN_THREAD: ${{ secrets.XAMVN_THREAD || 'https://xamvn.yachts/threads/307074/' }}
+        run: |
+          MAX_POSTS="${{ github.event.inputs.max_posts_per_run || '1' }}"
+          LIMIT_MONTH="${{ github.event.inputs.limit_per_month || '20' }}"
+          echo "🚀 Khởi chạy đăng video hàng ngày (Tối đa $MAX_POSTS video/lần)..."
+          python -u scripts/monthly_top_to_xamvn.py \
+            --post \
+            --max-posts-per-run "$MAX_POSTS" \
+            --limit-per-month "$LIMIT_MONTH" \
+            --past-months 12
+
+      - name: 💾 Commit & Push Progress
+        if: always()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          git add data/xamvn_posted_monthly.json data/monthly_videos.json data/zpic_uploaded.json data/zpic_bbcode.txt
+          if git diff --staged --quiet; then
+            echo "Không có video mới nào được đăng hôm nay."
+          else
+            git commit -m "Auto: daily top video $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
+            git pull --rebase origin main
+            git push origin main
+          fi

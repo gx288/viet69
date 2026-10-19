@@ -1,0 +1,70 @@
+name: Upload Selected Videos to Zpic
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Nhập danh sách Video ID hoặc Link (ngăn cách bằng dấu phẩy, để trống nếu đọc từ data/zpic_queue.txt)'
+        required: false
+        type: string
+        default: ''
+      watermark:
+        description: 'Chữ đóng dấu giữa video (để trống nếu không muốn đóng dấu)'
+        required: false
+        type: string
+        default: 'xamvid.netlify.app'
+  push:
+    paths:
+      - 'data/zpic_queue.txt'
+
+jobs:
+  upload-zpic:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install FFmpeg & Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg curl fonts-dejavu-core
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Zpic Uploader
+        run: |
+          WM_ARG="--watermark '${{ github.event.inputs.watermark || 'xamvid.netlify.app' }}'"
+          if [ "${{ github.event.inputs.watermark }}" = "none" ]; then
+            WM_ARG="--no-watermark"
+          fi
+          if [ -n "${{ github.event.inputs.targets }}" ]; then
+            eval python -u scripts/upload_to_zpic.py --targets "\"${{ github.event.inputs.targets }}\"" $WM_ARG
+          else
+            eval python -u scripts/upload_to_zpic.py --queue-file data/zpic_queue.txt $WM_ARG
+          fi
+
+      - name: Commit and push Zpic BBCode results
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data/zpic_uploaded.json data/zpic_bbcode.txt
+          git commit -m "Zpic Upload: $(date +%Y-%m-%d_%H-%M-%S)" || echo "No new uploads to commit"
+          git pull --rebase
+          git push
+
+      - name: Upload BBCode results as Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zpic-bbcode-results
+          path: |
+            data/zpic_uploaded.json
+            data/zpic_bbcode.txt
+          if-no-files-found: ignore

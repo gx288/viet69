@@ -1,0 +1,2 @@
+# Điền mỗi dòng 1 Video ID (ví dụ: 78843), hoặc Link bài viết viet69, hoặc Link .m3u8 / .mp4
+# Các dòng bắt đầu bằng dấu # sẽ được bỏ qua.
