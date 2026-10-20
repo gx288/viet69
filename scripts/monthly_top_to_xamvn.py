@@ -166,23 +166,32 @@ def fetch_thread_posted_hashes(thread_url: str, max_pages: int = 5) -> Set[str]:
     return posted_hashes
 
 
-def extract_post_details(post_url: str) -> Tuple[str, str, str, Optional[str]]:
+def extract_post_details(post_url: str) -> Tuple[Optional[str], str, str, Optional[str]]:
     """
     Bóc tách stream URL, tiêu đề, nội dung mô tả bài viết và link ảnh thumbnail từ Viet69.
-    Trả về: (stream_url, title, description, thumb_url)
+    Hỗ trợ tự động fallback qua nhiều server (Server #2 -> Server #1 -> các server khác).
+    Trả về: (stream_url_hoặc_None, title, description, thumb_url)
     """
     from urllib.parse import urlparse
     from bs4 import BeautifulSoup
+    import base64
 
     headers = {
         "User-Agent": USER_AGENT,
-        "Referer": "https://viet69.be/",
-        "X-Requested-With": "XMLHttpRequest"
+        "Referer": f"https://{ACTIVE_DOMAIN}/",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": f"https://{ACTIVE_DOMAIN}"
     }
     session = get_cf_session()
-    r = session.get(post_url, headers=headers, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=15)
-    if r.status_code != 200:
-        raise RuntimeError(f"Không mở được bài viết ({r.status_code}): {post_url}")
+
+    try:
+        r = session.get(post_url, headers=headers, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=15)
+        if r.status_code != 200:
+            print(f"  [-] Không mở được bài viết ({r.status_code}): {post_url}")
+            return None, "Video", "", None
+    except Exception as e:
+        print(f"  [-] Lỗi kết nối bài viết ({e}): {post_url}")
+        return None, "Video", "", None
 
     soup = BeautifulSoup(r.text, "html.parser")
     title_el = soup.find("h1") or soup.find("h2")
@@ -197,50 +206,95 @@ def extract_post_details(post_url: str) -> Tuple[str, str, str, Optional[str]]:
     thumb_meta = soup.find("meta", property="og:image") or soup.find("meta", attrs={"name": "twitter:image"})
     thumb_url = thumb_meta.get("content") if thumb_meta else None
 
-    # Bóc tách luồng HLS Server #2 trước khi dọn dẹp nội dung mô tả
+    # Lấy tất cả nút server trên trang
     buttons = soup.find_all("button", class_="video2-btn")
 
     # Lấy nội dung mô tả video
     desc_el = soup.select_one(".entry-content, .video-description, .post-entry, #entry-content, .desc")
     description = ""
     if desc_el:
-        # Clone hoặc lấy text mà không làm mất buttons trong soup
         desc_text = desc_el.get_text(" ", strip=True)
-        # Loại bỏ các đoạn chữ của button khỏi mô tả
         for b in buttons:
             desc_text = desc_text.replace(b.get_text(strip=True), "")
         desc_text = re.sub(r"^Loading\.\.\.\s*\d+[\.\d]*[KM]?\s*", "", desc_text).strip()
         description = re.sub(r"\s+", " ", desc_text).strip()
-    for btn in buttons:
+
+    # Sắp xếp ưu tiên: Server #2 trước, sau đó tới Server #1, rồi các server khác
+    def server_sort_key(btn):
+        t = btn.get_text(strip=True)
+        if "2" in t:
+            return 0
+        if "1" in t:
+            return 1
+        return 2
+
+    sorted_buttons = sorted(buttons, key=server_sort_key)
+
+    for btn in sorted_buttons:
         btn_text = btn.get_text(strip=True)
         movie_id = btn.get("data-video")
         video_type = btn.get("data-type")
         if not movie_id:
             continue
 
-        if "Server #2" in btn_text or len(buttons) == 1:
-            ajax_url = "https://viet69.be/get.xvideo.php" if video_type == "10" else "https://viet69.be/get.video.php"
-            payload = f"movie_id={movie_id}&type={video_type}&index=1"
-            ajax_headers = headers.copy()
-            ajax_headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
-            ajax_headers["Referer"] = post_url
-            res = session.post(ajax_url, data=payload, headers=ajax_headers, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=15)
-            if res.status_code == 200:
-                m = re.search(r'src=["\'](https?://[^"\']+)["\']', res.text)
-                if m:
-                    embed_url = m.group(1)
-                    parsed = urlparse(embed_url)
-                    vid = parsed.path.strip("/").split("/")[-1]
-                    api_url = f"https://{parsed.netloc}/api/get-video?id={vid}&counter=0&tried_ids="
-                    api_res = session.get(api_url, headers={"User-Agent": USER_AGENT, "Referer": embed_url}, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=15)
-                    if api_res.status_code == 200:
-                        vdata = api_res.json()
-                        urls = vdata.get("urls") or ([vdata.get("url")] if vdata.get("url") else [])
-                        print(f"  [debug] urls: {urls}")
-                        if urls:
-                            return urls[0], title, description, thumb_url
+        # Trường hợp 1: Base64 direct link (type 19, 20)
+        if video_type in ["19", "20"]:
+            try:
+                pad = len(movie_id) % 4
+                if pad:
+                    movie_id += '=' * (4 - pad)
+                decoded = base64.b64decode(movie_id).decode('utf-8', errors='ignore')
+                if decoded:
+                    direct_url = f"https://cdn.cd-vs.com/{decoded}"
+                    print(f"  [+] Bóc tách thành công từ {btn_text} (Base64): {direct_url}")
+                    return direct_url, title, description, thumb_url
+            except Exception:
+                pass
 
-    raise RuntimeError(f"Không bóc tách được stream URL từ bài viết: {post_url}")
+        # Trường hợp 2: AJAX Endpoint (type 25, 10, v.v.)
+        ajax_url = f"https://{ACTIVE_DOMAIN}/get.xvideo.php" if video_type == "10" else f"https://{ACTIVE_DOMAIN}/get.video.php"
+        payload = f"movie_id={movie_id}&type={video_type}&index=1"
+        ajax_headers = {
+            "User-Agent": USER_AGENT,
+            "Referer": post_url,
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": f"https://{ACTIVE_DOMAIN}",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+        }
+
+        for attempt in range(2):
+            try:
+                res = session.post(ajax_url, data=payload, headers=ajax_headers, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=12)
+                if res.status_code == 200:
+                    m = re.search(r'src=[\'"]([^\'"]+)[\'"]', res.text)
+                    if m:
+                        embed_url = m.group(1)
+                        parsed = urlparse(embed_url)
+                        vid = parsed.path.strip("/").split("/")[-1]
+                        api_url = f"https://{parsed.netloc}/api/get-video?id={vid}&counter=0&tried_ids="
+                        api_headers = {
+                            "User-Agent": USER_AGENT,
+                            "Referer": embed_url,
+                            "X-Requested-With": "XMLHttpRequest",
+                            "Origin": f"https://{parsed.netloc}"
+                        }
+                        api_res = session.get(api_url, headers=api_headers, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=12)
+                        if api_res.status_code == 200:
+                            vdata = api_res.json()
+                            urls = []
+                            if isinstance(vdata.get("urls"), list):
+                                urls = vdata["urls"]
+                            elif vdata.get("url"):
+                                urls = [vdata["url"]]
+                            if urls:
+                                print(f"  [+] Bóc tách thành công luồng từ {btn_text}: {urls[0]}")
+                                return urls[0], title, description, thumb_url
+            except Exception as e:
+                import time
+                time.sleep(1)
+
+    print(f"  [-] Không bóc tách được stream URL nào từ bài viết: {post_url}")
+    return None, title, description, thumb_url
 
 
 def prepend_thumbnail_preview(video_path: str, thumb_url_or_path: Optional[str], out_final_path: str, watermark_text: Optional[str] = None) -> bool:
@@ -415,6 +469,32 @@ def fetch_monthly_top_videos(month_str: str, limit: int = 20) -> List[Dict[str, 
             print(f"[-] Lỗi khi quét trang {page} tháng {clean_month}: {e}")
             break
 
+    # Fallback từ data.txt nếu cào trực tiếp chưa đủ video
+    data_txt_path = os.path.join(PROJECT_DIR, "data.txt")
+    if len(results) < limit and os.path.exists(data_txt_path):
+        try:
+            with open(data_txt_path, "r", encoding="utf-8") as f:
+                all_data = json.load(f)
+            month_prefix = clean_month.replace("/", "-")
+            matched = [x for x in all_data if x.get("date", "").startswith(month_prefix)]
+            matched.sort(key=lambda x: int(x.get("views", 0) or 0), reverse=True)
+            for item in matched:
+                href = item.get("link", "").rstrip("/") + "/"
+                if href and href not in seen_urls:
+                    seen_urls.add(href)
+                    results.append({
+                        "month": clean_month,
+                        "url": href,
+                        "title": item.get("title", "Video"),
+                        "views": f"{item.get('views', 0):,} Views",
+                        "id": str(item.get("id", ""))
+                    })
+                    if len(results) >= limit:
+                        break
+            print(f"[+] Đã bổ sung từ database data.txt: tổng cộng {len(results)}/{limit} video cho tháng {clean_month}.")
+        except Exception as e:
+            print(f"[!] Không thể đọc từ data.txt: {e}")
+
     print(f"[+] Tháng {clean_month}: Đã lấy được {len(results)}/{limit} video xem nhiều nhất.")
     return results
 
@@ -444,7 +524,16 @@ def ensure_video_on_zpic(
 
     os.makedirs(TEMP_DIR, exist_ok=True)
     print(f"[*] Bóc tách luồng HLS & nội dung: {video_item['title']} ({video_item['url']})...")
-    stream_url, real_title, description, thumb_url = extract_post_details(video_item["url"])
+    try:
+        stream_url, real_title, description, thumb_url = extract_post_details(video_item["url"])
+    except Exception as e:
+        print(f"    [-] Lỗi khi bóc tách luồng ({e}). Bỏ qua video này để thử video tiếp theo...")
+        return None
+
+    if not stream_url:
+        print(f"    [-] Không tìm thấy luồng stream hợp lệ cho bài viết này. Bỏ qua để thử video tiếp theo...")
+        return None
+
     video_item["title"] = real_title or video_item["title"]
     video_item["description"] = description
     video_item["thumb_url"] = thumb_url
