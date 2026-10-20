@@ -204,14 +204,31 @@ def get_font_file():
     return None
 
 
+def get_hls_demuxer_args():
+    """Detect and return supported HLS demuxer options for the current FFmpeg version."""
+    args = []
+    try:
+        res = subprocess.run(["ffmpeg", "-h", "demuxer=hls"], capture_output=True, text=True, errors="ignore")
+        help_text = res.stdout or ""
+        if "allowed_extensions" in help_text:
+            args.extend(["-allowed_extensions", "ALL"])
+        if "allowed_segment_extensions" in help_text:
+            args.extend(["-allowed_segment_extensions", "ALL"])
+        if "extension_picky" in help_text:
+            args.extend(["-extension_picky", "0"])
+    except Exception:
+        args.extend(["-allowed_extensions", "ALL"])
+    return args
+
+
 def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=2):
     """Download .m3u8 or .mp4 stream using FFmpeg with optional center watermark and skip black intro."""
+    hls_opts = get_hls_demuxer_args()
     cmd = [
         "ffmpeg",
         "-headers", "Referer: https://emb.cd-vs.com/\r\n",
         "-user_agent", USER_AGENT,
-        "-allowed_segment_extensions", "ALL",
-        "-extension_picky", "0",
+        *hls_opts
     ]
     if trim_start and trim_start > 0:
         cmd.extend(["-ss", str(trim_start)])

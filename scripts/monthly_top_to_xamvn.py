@@ -580,6 +580,9 @@ def ensure_video_on_zpic(
             f.write(f"Viewer Link   : {zpic_data['viewer_url']}\n")
 
         return record
+    except Exception as e:
+        print(f"    [-] Lỗi khi tải hoặc upload video lên Zpic: {e}")
+        return None
     finally:
         for p in [raw_mp4, final_mp4]:
             if os.path.exists(p):
