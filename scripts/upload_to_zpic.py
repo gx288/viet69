@@ -296,6 +296,9 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
     referer = "https://x.com/" if "twimg.com" in stream_url.lower() else "https://emb.cd-vs.com/"
     stream_duration = get_stream_duration(stream_url, referer=referer)
 
+    if stream_duration > 1800:
+        raise ValueError(f"SKIP_OVER_30M: Video dài {stream_duration/60:.1f} phút (> 30 phút), tự động bỏ qua.")
+
     is_long_video = stream_duration > 1000  # > ~16.5 minutes
 
     # Twitter amplify_video / multi-rendition HLS works best via yt-dlp to merge video + audio tracks
@@ -316,6 +319,10 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
             local_dur = get_stream_duration(temp_ytdlp)
             if local_dur > 0:
                 stream_duration = local_dur
+                if stream_duration > 1800:
+                    try: os.remove(temp_ytdlp)
+                    except Exception: pass
+                    raise ValueError(f"SKIP_OVER_30M: Video dài {stream_duration/60:.1f} phút (> 30 phút), tự động bỏ qua.")
                 is_long_video = stream_duration > 1000
 
     hls_opts = get_hls_demuxer_args() if raw_source.startswith("http") else []

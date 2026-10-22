@@ -47,6 +47,7 @@ if XAMVN_DIR not in sys.path:
 from upload_to_zpic import (
     upload_mp4_to_zpic,
     download_stream_to_mp4,
+    get_stream_duration,
     get_font_file,
     DATABASE_FILE,
     OUTPUT_JSON,
@@ -608,6 +609,14 @@ def ensure_video_on_zpic(
         print(f"    [-] Không tìm thấy luồng stream hợp lệ cho bài viết này. Bỏ qua để thử video tiếp theo...")
         return None
 
+    # Kiểm tra thời lượng: nếu video dài quá 30 phút (1800s) thì tự động bỏ qua ngay từ đầu
+    ref_check = "https://x.com/" if "twimg.com" in stream_url.lower() else "https://emb.cd-vs.com/"
+    dur_sec = get_stream_duration(stream_url, referer=ref_check)
+    if dur_sec > 1800:
+        print(f"    [i] BỎ QUA: Video dài {dur_sec/60:.1f} phút (> 30 phút giới hạn tối đa).")
+        video_item["skip_status"] = f"Bỏ qua (>30p: {dur_sec/60:.1f}p)"
+        return None
+
     # Nếu link stream từ Twitter/nguồn ngoài (không phải cd-vs.com của Viet69), không cắt 2s đầu
     effective_trim = 0.0 if ("twimg.com" in stream_url.lower() or "cd-vs.com" not in stream_url.lower()) else trim_start
 
@@ -659,7 +668,11 @@ def ensure_video_on_zpic(
 
         return record
     except Exception as e:
-        print(f"    [-] Lỗi khi tải hoặc upload video lên Zpic: {e}")
+        if "SKIP_OVER_30M" in str(e):
+            print(f"    [i] {e}")
+            video_item["skip_status"] = "Bỏ qua (>30p)"
+        else:
+            print(f"    [-] Lỗi khi tải hoặc upload video lên Zpic: {e}")
         return None
     finally:
         for p in [raw_mp4, final_mp4]:
@@ -981,9 +994,10 @@ def process_priority_sheet_queue(
 
         record = ensure_video_on_zpic(v_item, watermark=wm, trim_start=args.trim_start)
         if not record:
-            print(f"    [-] Không thể tải/upload video dòng #{row_idx}. Đánh dấu lỗi để không kẹt hàng đợi.")
+            status_mark = v_item.get("skip_status") or "Lỗi stream"
+            print(f"    [-] Bỏ qua dòng #{row_idx} ({status_mark}). Cập nhật trạng thái trên Sheet để chuyển sang dòng tiếp theo.")
             try:
-                ws.update(range_name=f"C{row_idx}", values=[["Lỗi stream"]])
+                ws.update(range_name=f"C{row_idx}", values=[[status_mark]])
             except Exception:
                 pass
             continue
