@@ -660,7 +660,7 @@ def main():
     parser.add_argument("--post", action="store_true", help="Tự động post lên Xamvn sau khi upload Zpic")
     parser.add_argument("-u", "--username", default=os.getenv("XAMVN_USERNAME", "cudai2m"), help="Tài khoản Xamvn (mặc định: cudai2m)")
     parser.add_argument("-p", "--password", default=os.getenv("XAMVN_PASSWORD", "lehunghup"), help="Mật khẩu Xamvn")
-    parser.add_argument("-t", "--thread", default=os.getenv("XAMVN_THREAD", "https://xamvn.yachts/threads/307074/"), help="Thread Xamvn")
+    parser.add_argument("-t", "--thread", default=os.getenv("XAMVN_THREAD", "https://xamvn.yachts/threads/311300/"), help="Thread Xamvn")
     parser.add_argument("--base-url", default="https://xamvn.yachts", help="Base URL Xamvn")
     parser.add_argument("--delay-between-posts", type=int, default=25, help="Giây chờ giữa các lần post tránh flood (mặc định: 25)")
     args = parser.parse_args()
