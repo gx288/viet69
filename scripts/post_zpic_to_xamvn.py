@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Xamvn Video Comment Poster (Action 2 - Tách biệt hoàn toàn với Tải/Upload Zpic)
-================================================================================
-Chỉ thực hiện đăng nhập Xamvn và comment các video ĐÃ ĐƯỢC UPLOAD LÊN ZPIC:
-1. Ưu tiên lấy các dòng có trạng thái 'Đã up Zpic (Chờ đăng)' (hoặc đã có Link Zpic MP4 ở Cột E)
-   trên Google Sheet Hàng Đợi (1ZQTydO0y5CGfCaFCcw72F0LXzR5b63p_6yzttTUHTyY).
-2. Nếu trên Google Sheet chưa có dòng nào chờ đăng, tự động lấy từ kho dự trữ `data/zpic_uploaded.json`
-   (những video đã được Action 1 tải lên Zpic nhưng chưa đăng lên Xamvn).
-3. Sau khi đăng thành công:
-   - Đánh dấu 'Đã lấy' + điền Link Post Xamvn vào Cột C & D trên Google Sheet.
-   - Lưu lịch sử vào `data/xamvn_posted_monthly.json` và đồng bộ `data/monthly_videos.json`.
-
-Cách chạy:
-    python scripts/post_zpic_to_xamvn.py --max-posts-per-run 1 --thread "https://xamvn.yachts/threads/311300/"
+Xamvn Hourly Smart Poster (Action 2 - Tự động phân chia Giờ Gửi Video vs Giờ Up Bài)
+====================================================================================
+Chạy mỗi 1 tiếng 1 lần qua cron-job.org (`xamvn-comment-video.yml`):
+- Tự động kiểm tra giờ Việt Nam hiện tại (`UTC+7`):
+  + Nếu đúng khung giờ gửi video (`VIDEO_POST_HOURS_VN`, mặc định: 11h, 15h, 20h, 23h giờ VN):
+    -> Lấy 1 video từ kho dự trữ `Đã up Zpic (Chờ đăng)` trên Google Sheet đăng vào thớt Xamvn
+       và đánh dấu `Đã lấy`.
+  + Nếu là các giờ còn lại trong ngày (hoặc khi kho dự trữ đang trống):
+    -> Tự động bình luận `"up lên"` để đẩy thớt lên trang 1 (cứ đủ 10 lần `"up lên"` thì chèn
+       bình luận nhắc xem web trên avatar).
 """
 
 import os
@@ -22,8 +19,8 @@ import sys
 import time
 import json
 import argparse
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Set, Tuple
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, List, Optional, Set
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
@@ -50,6 +47,20 @@ from monthly_top_to_xamvn import (
     parse_priority_sheet_row,
     extract_post_details,
     post_to_xamvn,
+)
+
+# =========================================================================
+# CẤU HÌNH KHUNG GIỜ GỬI VIDEO MỚI (GIỜ VIỆT NAM GMT+7)
+# - Vào các giờ trong danh sách này: Bot sẽ lấy 1 video mới từ kho dự trữ đăng lên thớt.
+# - Vào tất cả các giờ còn lại: Bot sẽ comment "up lên" để đẩy bài.
+# =========================================================================
+VIDEO_POST_HOURS_VN = [9, 12, 16, 20, 22, 0]
+
+BUMP_MESSAGE = "up lên"
+BUMP_LIMIT = 10
+MILESTONE_MESSAGE = (
+    'thôi dừng nhé. t để web trên ava nhé. tự vào mà xem nha mấy tml\n'
+    '[IMG size="430x960"]https://xamvn.yachts/attachments/863527/[/IMG]'
 )
 
 
@@ -108,8 +119,47 @@ def find_zpic_record(
     return None
 
 
+def post_bump_comment(bot_class, args, history: Dict[str, Any]) -> bool:
+    bump_count = int(history.get("bump_count", 0))
+    if bump_count >= BUMP_LIMIT:
+        msg = MILESTONE_MESSAGE
+        next_bump_count = 0
+        label = f"MILESTONE (sau {BUMP_LIMIT} lần up)"
+    else:
+        msg = BUMP_MESSAGE
+        next_bump_count = bump_count + 1
+        label = f"UP BÀI ({next_bump_count}/{BUMP_LIMIT})"
+
+    print(f"\n[*] Chế độ [{label}]: Đang đăng bình luận đẩy thớt vào {args.thread}...")
+    bot = bot_class(base_url=args.base_url, use_cache=True, verbose=True)
+    if not bot.login(args.username, args.password):
+        print(f"[-] Đăng nhập tài khoản [{args.username}] thất bại!")
+        return False
+
+    ok, post_id = bot.post_reply(args.thread, msg)
+    if ok:
+        history["bump_count"] = next_bump_count
+        history["last_bump_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        save_posted_history(history)
+        print(f"[SUCCESS] Đã bình luận đẩy bài thành công (Post ID: {post_id})!")
+        return True
+    print("[-] Bình luận đẩy bài thất bại!")
+    return False
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Xamvn Video Comment Poster (Action 2 - Chỉ đăng bài từ kho Zpic)")
+    parser = argparse.ArgumentParser(description="Xamvn Smart Hourly Poster (Gửi Video vs Up Bài)")
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "video", "bump"],
+        default="auto",
+        help="Chế độ chạy: 'auto' (tự chọn theo giờ VN), 'video' (ép gửi video mới), 'bump' (ép comment up bài)",
+    )
+    parser.add_argument(
+        "--video-hours",
+        default=",".join(str(h) for h in VIDEO_POST_HOURS_VN),
+        help="Các giờ VN (0-23) sẽ gửi video mới (mặc định: 9,12,16,20,22,0)",
+    )
     parser.add_argument("--max-posts-per-run", type=int, default=1, help="Số bình luận video tối đa mỗi lần chạy (mặc định: 1)")
     parser.add_argument("-u", "--username", default=os.getenv("XAMVN_USERNAME", "cudai2m"), help="Tài khoản Xamvn")
     parser.add_argument("-p", "--password", default=os.getenv("XAMVN_PASSWORD", "lehunghup"), help="Mật khẩu Xamvn")
@@ -126,12 +176,48 @@ def main():
         from scripts.xamvn_bot import XamvnBot
         bot_class = XamvnBot
 
+    vn_tz = timezone(timedelta(hours=7))
+    now_vn = datetime.now(vn_tz)
+    current_vn_hour = now_vn.hour
+
+    video_hours_set = set()
+    for part in args.video_hours.split(","):
+        part = part.strip()
+        if part.isdigit():
+            video_hours_set.add(int(part) % 24)
+
     history = load_posted_history()
     uploaded_list = load_zpic_uploaded()
 
+    # Kiểm tra xem trong giờ hiện tại đã đăng video mới chưa (tránh đăng 2 video trong cùng 1 khung giờ)
+    already_posted_this_hour = False
+    now_hour_key = now_vn.strftime("%Y-%m-%d %H")
+    if history.get("last_video_hour_vn") == now_hour_key:
+        already_posted_this_hour = True
+
+    if args.mode == "video":
+        should_post_video = True
+    elif args.mode == "bump":
+        should_post_video = False
+    else:
+        should_post_video = (current_vn_hour in video_hours_set) and not already_posted_this_hour
+
+    print("=" * 70)
+    print("💬 XAMVN SMART HOURLY POSTER (GỬI VIDEO MỚI & UP BÀI THEO GIỜ)")
+    print(f"Giờ Việt Nam    : {now_vn.strftime('%Y-%m-%d %H:%M:%S')} (Giờ hiện tại: {current_vn_hour}h)")
+    print(f"Khung giờ Video : {sorted(video_hours_set)}h | Các giờ khác: Comment '{BUMP_MESSAGE}'")
+    print(f"Quyết định chạy : {'🎬 GỬI VIDEO MỚI' if should_post_video else '⬆️ COMMENT UP BÀI'}")
+    print(f"Tài khoản Xamvn : {args.username} | Thread: {args.thread}")
+    print("=" * 70)
+
+    if not should_post_video:
+        post_bump_comment(bot_class, args, history)
+        return
+
+    # --- CHẾ ĐỘ GỬI VIDEO MỚI TỪ KHO DỰ TRỮ ZPIC ---
     posted_urls: Set[str] = set()
     posted_titles: Set[str] = set()
-    posted_hashes: Set[str] = set()
+    posted_hashes: Set[str] = {"bmrHo4K4b", "LHWvt1CbX2fd", "5d13wzaL9iA"}
 
     for item in history.get("posted", []):
         if item.get("source_post"):
@@ -150,19 +236,9 @@ def main():
     thread_hashes = fetch_thread_posted_hashes(args.thread, max_pages=5)
     posted_hashes.update(thread_hashes)
 
-    print("=" * 70)
-    print("💬 XAMVN VIDEO COMMENT POSTER (CHỈ ĐĂNG BÀI TỪ KHO ZPIC)")
-    print(f"Sheet Ưu Tiên   : https://docs.google.com/spreadsheets/d/{PRIORITY_SHEET_ID}/edit")
-    print(f"Tài khoản Xamvn : {args.username}")
-    print(f"Thread đích     : {args.thread}")
-    print(f"Số bài/lần chạy : {args.max_posts_per_run}")
-    print(f"Tổng kho Zpic   : {len(uploaded_list)} video | Đã đăng: {len(history.get('posted', []))} bài")
-    print("=" * 70)
-
     posted_count = 0
-    now_month = datetime.now().strftime("%Y/%m")
+    now_month = now_vn.strftime("%Y/%m")
 
-    # BƯỚC 1: Kiểm tra Google Sheet ưu tiên (các dòng đã có Link Zpic MP4 ở Cột E hoặc đã có trong zpic_uploaded.json)
     ws = get_priority_sheet_worksheet(PRIORITY_SHEET_ID, PRIORITY_SHEET_TAB)
     if ws:
         try:
@@ -218,7 +294,6 @@ def main():
                 bbcode = build_bbcode_from_mp4(direct_mp4, vid_hash)
                 frame_url = f"https://f.zzpi.cc/{vid_hash}.fr.jpeg"
                 viewer_url = f"https://zpic.org/v/{vid_hash}"
-                # Lấy tiêu đề chuẩn từ Viet69 nếu Cột A là link Viet69
                 if parsed.get("link_type") == "viet69" and parsed.get("viet69_url"):
                     try:
                         _, v69_title, v69_desc, _ = extract_post_details(parsed["viet69_url"])
@@ -228,7 +303,6 @@ def main():
                     except Exception:
                         pass
             else:
-                # Dòng này chưa được Action 1 tải lên Zpic -> bỏ qua để chờ Action 1 tải
                 continue
 
             if not direct_mp4 or not vid_hash:
@@ -242,7 +316,7 @@ def main():
                     pass
                 continue
 
-            print(f"\n--- [Đăng từ Google Sheet Dòng #{row_idx}] ---")
+            print(f"\n--- [Đăng Video Mới từ Google Sheet Dòng #{row_idx}] ---")
             print(f"    Tiêu đề   : {final_title}")
             print(f"    Zpic MP4  : {direct_mp4}")
 
@@ -258,7 +332,7 @@ def main():
             if ok:
                 posted_count += 1
                 post_link = f"https://xamvn.yachts/posts/{post_id}/" if post_id else args.thread
-                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                now_str = now_vn.strftime("%Y-%m-%d %H:%M:%S")
 
                 try:
                     ws.update(
@@ -281,95 +355,24 @@ def main():
                     "frame_url": frame_url,
                     "zpic_viewer": viewer_url,
                     "post_id": post_id,
-                    "posted_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "posted_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 }
                 history["posted"].append(history_item)
+                history["last_video_hour_vn"] = now_hour_key
+                history["bump_count"] = 0
                 posted_hashes.add(vid_hash)
                 posted_titles.add(final_title.strip().lower())
                 save_posted_history(history)
                 sync_to_xamvid_web(history)
-                print(f"    [SUCCESS] Đã bình luận lên Xamvn thành công (Post ID: {post_id})!")
-
-                if posted_count < args.max_posts_per_run:
-                    print(f"    ⏳ Nghỉ {args.delay_between_posts}s chống flood...")
-                    time.sleep(args.delay_between_posts)
-
-    # BƯỚC 2: Nếu trên Sheet chưa có sẵn bài nào chờ đăng, kiểm tra kho dự trữ data/zpic_uploaded.json
-    test_hashes = {"bmrHo4K4b", "LHWvt1CbX2fd", "5d13wzaL9iA"}
-    posted_hashes.update(test_hashes)
-
-    if posted_count < args.max_posts_per_run:
-        for rec in uploaded_list:
-            if args.max_posts_per_run and posted_count >= args.max_posts_per_run:
-                break
-
-            z = rec.get("zpic", {})
-            direct_mp4 = z.get("direct_mp4", "")
-            if not direct_mp4:
-                continue
-
-            vid_hash = z.get("name") or extract_vid_hash(direct_mp4)
-            title = (rec.get("title") or "Video Hot").strip()
-            src_post = (rec.get("source_post") or "").rstrip("/")
-            src_stream = (rec.get("source_stream") or "").rstrip("/")
-
-            if (
-                vid_hash in posted_hashes
-                or title.lower() in posted_titles
-                or (src_post and src_post in posted_urls)
-                or (src_stream and src_stream in posted_urls)
-            ):
-                continue
-
-            bbcode = z.get("bbcode_full") or build_bbcode_from_mp4(direct_mp4, vid_hash)
-            print(f"\n--- [Đăng từ Kho Dự Trữ zpic_uploaded.json] ---")
-            print(f"    Tiêu đề   : {title}")
-            print(f"    Zpic MP4  : {direct_mp4}")
-
-            ok, post_id = post_to_xamvn(
-                bot_class=bot_class,
-                username=args.username,
-                password=args.password,
-                thread_target=args.thread,
-                title=title,
-                bbcode=bbcode,
-                base_url=args.base_url,
-            )
-            if ok:
-                posted_count += 1
-                history_item = {
-                    "month": rec.get("month") or now_month,
-                    "title": title,
-                    "description": rec.get("description", ""),
-                    "views": rec.get("views", "Hot"),
-                    "duration": z.get("duration", 0),
-                    "source_post": src_post or direct_mp4,
-                    "source_stream": src_stream,
-                    "zpic_mp4": direct_mp4,
-                    "frame_url": z.get("frame_url", f"https://f.zzpi.cc/{vid_hash}.fr.jpeg"),
-                    "zpic_viewer": z.get("viewer_url", f"https://zpic.org/v/{vid_hash}"),
-                    "post_id": post_id,
-                    "posted_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
-                }
-                history["posted"].append(history_item)
-                posted_hashes.add(vid_hash)
-                posted_titles.add(title.lower())
-                if src_post:
-                    posted_urls.add(src_post)
-                save_posted_history(history)
-                sync_to_xamvid_web(history)
-                print(f"    [SUCCESS] Đã bình luận từ kho dự trữ thành công (Post ID: {post_id})!")
+                print(f"    [SUCCESS] Đã đăng video lên Xamvn thành công (Post ID: {post_id})!")
 
                 if posted_count < args.max_posts_per_run:
                     time.sleep(args.delay_between_posts)
 
+    # Nếu đến giờ gửi video mà trong kho chưa có sẵn video chờ đăng -> tự động chuyển sang comment "up lên"
     if posted_count == 0:
-        print("\n[!] Hiện chưa có video nào ở trạng thái 'Đã up Zpic (Chờ đăng)' trên Sheet hoặc trong kho dự trữ.")
-        print("    -> Hãy chạy Action 1 (Tải & Upload Zpic) trước để nạp sẵn video vào kho!")
-
-    print("\n" + "=" * 70)
-    print(f"HOÀN TẤT! Đã đăng mới: {posted_count} bình luận lên Xamvn.")
-    print("=" * 70)
+        print("\n[i] Kho dự trữ hiện chưa có sẵn video chờ đăng -> Tự động chuyển sang comment 'up lên' đẩy bài!")
+        post_bump_comment(bot_class, args, history)
 
 
 if __name__ == "__main__":

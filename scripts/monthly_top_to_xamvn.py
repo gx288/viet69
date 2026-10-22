@@ -943,10 +943,26 @@ def process_priority_sheet_queue(
     posted_count = 0
     now_month = datetime.now().strftime("%Y/%m")
 
+    # Đếm số link đang dự trữ sẵn (Đã up Zpic chờ đăng) trên Google Sheet
+    buffered_count = 0
+    for r in rows[1:]:
+        c_val = (r[2] if len(r) > 2 else "").strip().lower()
+        e_val = (r[4] if len(r) > 4 else "").strip().lower()
+        if any(k in c_val for k in ["đã lấy", "da lay", "done", "ok", "skip", "bỏ qua", "lỗi"]):
+            continue
+        if any(k in c_val for k in ["đã up zpic", "da up zpic", "chờ đăng", "cho dang"]) or (e_val.startswith("http") and ".mp4" in e_val):
+            buffered_count += 1
+
+    if not args.post:
+        print(f"[i] Kho dự trữ trên Google Sheet hiện có: {buffered_count}/{args.max_posts_per_run} link chờ đăng.")
+        if args.max_posts_per_run and buffered_count >= args.max_posts_per_run:
+            print(f"[+] Kho dự trữ đã đủ {buffered_count} link (>= {args.max_posts_per_run}). Tạm nghỉ không cần tải thêm!")
+            return 0, 0
+
     for row_idx in range(2, len(rows) + 1):
-        active_count = posted_count if args.post else uploaded_count
+        active_count = posted_count if args.post else (buffered_count + uploaded_count)
         if args.max_posts_per_run and active_count >= args.max_posts_per_run:
-            print(f"[+] Đã xử lý đủ {active_count}/{args.max_posts_per_run} video từ Google Sheet ưu tiên cho lần chạy này.")
+            print(f"[+] Đã đạt đủ {active_count}/{args.max_posts_per_run} video mục tiêu trên Google Sheet ưu tiên.")
             break
 
         row = rows[row_idx - 1]
@@ -1254,6 +1270,10 @@ def main():
     total_posted += sheet_post
 
     # BƯỚC 2: Chỉ khi Google Sheet ưu tiên đã hết link (hoặc chưa đủ max_posts_per_run) mới quét Top Viet69 theo tháng
+    # Nếu chạy chế độ dự trữ mà trên Sheet vẫn còn link hoặc đã đủ kho thì không quét tháng
+    if not args.post:
+        return
+
     for m in all_months:
         active_run_count = total_posted if args.post else total_uploaded
         if args.max_posts_per_run and active_run_count >= args.max_posts_per_run:

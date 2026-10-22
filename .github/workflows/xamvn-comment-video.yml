@@ -1,12 +1,24 @@
 name: "2. Đăng Nhập & Comment Video Xamvn (Tùy Chỉnh Tần Suất)"
 
 on:
-  # Chạy định kỳ mỗi 1 tiếng 1 lần (đồng thời kết hợp cron-job.org gọi chính xác theo phút)
+  # Chạy định kỳ mỗi 1 tiếng 1 lần (đồng thời kết hợp cron-job.org gọi chính xác theo giờ)
+  # - Vào các giờ gửi video (mặc định: 9h, 12h, 16h, 20h, 22h, 0h giờ VN): Gửi 1 video mới từ kho dự trữ Zpic
+  # - Vào tất cả các giờ còn lại: Tự động comment "up lên" đẩy thớt
   schedule:
     - cron: '0 * * * *'
 
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Chế độ chạy: 'auto' (tự phân theo giờ VN), 'video' (ép gửi video mới), 'bump' (ép comment up bài)"
+        required: false
+        type: string
+        default: 'auto'
+      video_hours:
+        description: 'Các giờ VN (0-23) sẽ gửi video mới (mặc định: 9,12,16,20,22,0)'
+        required: false
+        type: string
+        default: '9,12,16,20,22,0'
       max_posts_per_run:
         description: 'Số bình luận video cần đăng trong lần chạy này (mặc định: 1)'
         required: false
@@ -17,11 +29,6 @@ on:
         required: false
         type: string
         default: 'https://xamvn.yachts/threads/311300/'
-      delay_between_posts:
-        description: 'Số giây chờ giữa 2 lần bình luận chống flood (mặc định: 25)'
-        required: false
-        type: string
-        default: '25'
 
 permissions:
   contents: write
@@ -51,22 +58,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install curl_cffi beautifulsoup4 gspread google-auth requests
 
-      - name: 💬 Đăng Nhập & Comment Video từ Kho Zpic lên Xamvn
+      - name: 💬 Đăng Nhập & Bình Luận Xamvn (Tự Động Theo Giờ)
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           XAMVN_USERNAME: ${{ secrets.XAMVN_USERNAME || 'cudai2m' }}
           XAMVN_PASSWORD: ${{ secrets.XAMVN_PASSWORD || 'lehunghup' }}
           XAMVN_THREAD: ${{ github.event.inputs.thread_url || 'https://xamvn.yachts/threads/311300/' }}
         run: |
+          MODE="${{ github.event.inputs.mode || 'auto' }}"
+          VHOURS="${{ github.event.inputs.video_hours || '9,12,16,20,22,0' }}"
           MAX_POSTS="${{ github.event.inputs.max_posts_per_run || '1' }}"
           THREAD="${{ github.event.inputs.thread_url || 'https://xamvn.yachts/threads/311300/' }}"
-          DELAY="${{ github.event.inputs.delay_between_posts || '25' }}"
 
-          echo "🚀 Khởi chạy comment video đã up Zpic lên Xamvn (Tối đa $MAX_POSTS bài)..."
           python -u scripts/post_zpic_to_xamvn.py \
+            --mode "$MODE" \
+            --video-hours "$VHOURS" \
             --max-posts-per-run "$MAX_POSTS" \
-            --thread "$THREAD" \
-            --delay-between-posts "$DELAY"
+            --thread "$THREAD"
 
       - name: 💾 Commit & Push Lịch Sử Đăng Bài
         if: always()
@@ -78,6 +86,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "Không có bài đăng mới nào cần lưu."
           else
-            git commit -m "Auto: comment video to Xamvn $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
+            git commit -m "Auto: comment to Xamvn $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
             git push origin main
           fi
