@@ -27,7 +27,7 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: 🐍 Set up Python 3.10
         uses: actions/setup-python@v5
@@ -38,8 +38,8 @@ jobs:
       - name: 📦 Install system dependencies
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y ffmpeg curl fonts-dejavu-core
+            sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::http::Timeout="10" update
+            sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::http::Timeout="10" install -y ffmpeg curl fonts-dejavu-core
           else
             echo "ffmpeg and curl are already installed."
           fi
