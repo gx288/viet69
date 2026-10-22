@@ -707,49 +707,136 @@ def get_priority_sheet_worksheet(sheet_id: str = PRIORITY_SHEET_ID, tab_name: st
         return None
 
 
+def extract_badnews_details(badnews_url: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Tự động bóc tách link stream (.m3u8 / .mp4), ảnh poster thumbnail và tiêu đề từ trang https://bad.news/t/...
+    Trả về: (stream_url, thumb_url, title)
+    """
+    from bs4 import BeautifulSoup
+    if not badnews_url.lower().startswith("http"):
+        badnews_url = "https://" + badnews_url.lstrip("/")
+
+    session = get_cf_session()
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Referer": "https://bad.news/"
+    }
+    try:
+        r = session.get(badnews_url, headers=headers, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=15)
+        if r.status_code != 200:
+            print(f"  [-] Không mở được link bad.news ({r.status_code}): {badnews_url}")
+            return None, None, None
+    except Exception as e:
+        print(f"  [-] Lỗi kết nối bad.news ({e}): {badnews_url}")
+        return None, None, None
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    m_id = re.search(r"/t/(\d+)", badnews_url)
+    post_id = m_id.group(1) if m_id else None
+
+    video_el = None
+    if post_id:
+        video_el = soup.find("video", attrs={"data-id": post_id})
+    if not video_el:
+        video_el = soup.find("video", class_="my-videos") or soup.find("video")
+
+    stream_url = None
+    thumb_url = None
+
+    if video_el:
+        stream_url = video_el.get("data-source") or video_el.get("src")
+        if not stream_url:
+            src_tag = video_el.find("source")
+            if src_tag:
+                stream_url = src_tag.get("src") or src_tag.get("data-src")
+        thumb_url = video_el.get("poster")
+
+    if not stream_url:
+        m_m3u8 = re.search(r"(https?://[^\s\"'<>]+?\.m3u8(?:\?[^\s\"'<>]*)?)", r.text, re.IGNORECASE)
+        if m_m3u8:
+            stream_url = m_m3u8.group(1)
+        else:
+            m_mp4 = re.search(r"(https?://[^\s\"'<>]+?\.mp4(?:\?[^\s\"'<>]*)?)", r.text, re.IGNORECASE)
+            if m_mp4:
+                stream_url = m_mp4.group(1)
+
+    if not thumb_url:
+        og_img = soup.find("meta", property="og:image") or soup.find("meta", attrs={"name": "twitter:image:src"})
+        if og_img:
+            thumb_url = og_img.get("content")
+
+    og_title = soup.find("meta", property="og:title")
+    title = og_title.get("content", "").strip() if og_title else (soup.title.get_text(strip=True) if soup.title else "")
+
+    if stream_url:
+        print(f"  [+] Bóc tách thành công từ bad.news ({badnews_url}):")
+        print(f"      -> Stream : {stream_url}")
+        if thumb_url:
+            print(f"      -> Poster : {thumb_url}")
+    return stream_url, thumb_url, title
+
+
 def parse_priority_sheet_row(col_a: str, col_b: str) -> Dict[str, str]:
     """
     Phân tích dữ liệu từ 2 cột của Google Sheet:
     - Cột 1 (col_a): Link bài viết Viet69 (hoặc tiêu đề tùy chỉnh).
-    - Cột 2 (col_b): Link stream (.m3u8 / .mp4) và/hoặc mã HTML chứa poster/video.
+    - Cột 2 (col_b): Link https://bad.news/t/... hoặc link stream (.m3u8 / .mp4) và/hoặc mã HTML chứa poster/video.
     """
     import html as html_lib
     col_a = (col_a or "").strip()
     col_b_raw = html_lib.unescape((col_b or "").strip())
 
     viet69_url = ""
+    badnews_url = ""
     custom_title = ""
 
     if col_a:
-        # Kiểm tra xem Cột 1 có phải URL hoặc link viet69 không
-        url_match = re.search(r'(https?://[^\s"\'<>]+|(?:www\.)?viet69\.[a-z]+/[^\s"\'<>]+)', col_a, re.IGNORECASE)
-        if url_match:
-            raw_u = url_match.group(1)
-            if not raw_u.lower().startswith("http"):
-                raw_u = "https://" + raw_u.lstrip("/")
-            if not raw_u.endswith("/"):
-                raw_u += "/"
-            viet69_url = raw_u
+        bn_in_a = re.search(r"(https?://(?:www\.)?bad\.news/[^\s\"'<>]+|(?:www\.)?bad\.news/[^\s\"'<>]+)", col_a, re.IGNORECASE)
+        if bn_in_a:
+            badnews_url = bn_in_a.group(1)
+            if not badnews_url.lower().startswith("http"):
+                badnews_url = "https://" + badnews_url.lstrip("/")
         else:
-            custom_title = col_a
+            url_match = re.search(r"(https?://[^\s\"'<>]+|(?:www\.)?viet69\.[a-z]+/[^\s\"'<>]+)", col_a, re.IGNORECASE)
+            if url_match:
+                raw_u = url_match.group(1)
+                if not raw_u.lower().startswith("http"):
+                    raw_u = "https://" + raw_u.lstrip("/")
+                if not raw_u.endswith("/"):
+                    raw_u += "/"
+                viet69_url = raw_u
+            else:
+                custom_title = col_a
 
     stream_url = ""
     thumb_url = ""
 
     if col_b_raw:
-        # Tìm link stream .m3u8 hoặc .mp4 trong Cột 2
-        m_stream = re.search(r'(https?://[^\s"\'<>]+?\.(?:m3u8|mp4)(?:\?[^\s"\'<>]*)?)', col_b_raw, re.IGNORECASE)
-        if m_stream:
-            stream_url = m_stream.group(1)
-        elif col_b_raw.lower().startswith("http") and not re.search(r'\.(?:jpg|jpeg|png|webp)(?:\?|$)', col_b_raw, re.IGNORECASE):
-            stream_url = col_b_raw.split()[0]
+        bn_match = re.search(r"(https?://(?:www\.)?bad\.news/[^\s\"'<>]+|(?:www\.)?bad\.news/[^\s\"'<>]+)", col_b_raw, re.IGNORECASE)
+        if bn_match:
+            badnews_url = bn_match.group(1)
+            if not badnews_url.lower().startswith("http"):
+                badnews_url = "https://" + badnews_url.lstrip("/")
+        else:
+            m_stream = re.search(r"(https?://[^\s\"'<>]+?\.(?:m3u8|mp4)(?:\?[^\s\"'<>]*)?)", col_b_raw, re.IGNORECASE)
+            if m_stream:
+                stream_url = m_stream.group(1)
+            elif col_b_raw.lower().startswith("http") and not re.search(r"\.(?:jpg|jpeg|png|webp)(?:\?|$)", col_b_raw, re.IGNORECASE):
+                stream_url = col_b_raw.split()[0]
 
-        # Tìm link ảnh poster/thumbnail trong Cột 2 (ví dụ: div class="plyr__poster" hoặc pbs.twimg.com)
-        m_thumb = re.search(r'(https?://[^\s"\'<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s"\'<>]*)?)', col_b_raw, re.IGNORECASE)
-        if m_thumb:
-            thumb_url = m_thumb.group(1)
+            m_thumb = re.search(r"(https?://[^\s\"'<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s\"'<>]*)?)", col_b_raw, re.IGNORECASE)
+            if m_thumb:
+                thumb_url = m_thumb.group(1)
 
-    # Tạo tiêu đề mặc định từ slug Viet69 nếu chưa có
+    if badnews_url and not stream_url:
+        bn_stream, bn_thumb, bn_title = extract_badnews_details(badnews_url)
+        if bn_stream:
+            stream_url = bn_stream
+        if bn_thumb and not thumb_url:
+            thumb_url = bn_thumb
+        if bn_title and not custom_title and not viet69_url:
+            custom_title = bn_title
+
     fallback_title = custom_title
     if not fallback_title and viet69_url:
         slug_part = viet69_url.rstrip("/").split("/")[-1]
@@ -759,6 +846,7 @@ def parse_priority_sheet_row(col_a: str, col_b: str) -> Dict[str, str]:
 
     return {
         "viet69_url": viet69_url,
+        "badnews_url": badnews_url,
         "stream_url": stream_url,
         "thumb_url": thumb_url,
         "title": fallback_title
@@ -814,6 +902,8 @@ def process_priority_sheet_queue(
         col_c = (row[2] if len(row) > 2 else "").strip()
 
         if not col_a and not col_b:
+            continue
+        if not col_b and not any(k in col_a.lower() for k in ["bad.news", ".m3u8", ".mp4"]):
             continue
 
         status_lower = col_c.lower()
