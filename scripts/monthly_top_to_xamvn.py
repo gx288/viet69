@@ -597,17 +597,30 @@ def post_to_xamvn(
     thread_target: str,
     title: str,
     bbcode: str,
+    thumb_url: str = "",
     description: str = "",
     base_url: str = "https://xamvn.yachts"
 ) -> Tuple[bool, Optional[str]]:
-    """Đăng bài bình luận video kèm tiêu đề nổi bật lên Xamvn (bỏ dòng mô tả rác)."""
+    """
+    Đăng bài bình luận video lên Xamvn theo thứ tự:
+    1. Thumbnail [IMG]{thumb_url}[/IMG]
+    2. Video embed [video]...[/video]
+    3. Text tiêu đề in đậm [B][SIZE=4]{title}[/SIZE][/B]
+    """
     bot = bot_class(base_url=base_url, use_cache=True, verbose=True)
     if not bot.login(username, password):
         print(f"[-] Đăng nhập tài khoản [{username}] thất bại!")
         return False, None
 
-    # Chỉ để tiêu đề nổi bật và video nhúng (bỏ hoàn toàn dòng mô tả boilerplate)
-    full_message = f"[B][SIZE=4]{title}[/SIZE][/B]\n\n{bbcode}"
+    parts = []
+    if thumb_url:
+        parts.append(f"[IMG]{thumb_url}[/IMG]")
+    if bbcode:
+        parts.append(bbcode)
+    if title:
+        parts.append(f"[B][SIZE=4]{title}[/SIZE][/B]")
+
+    full_message = "\n\n".join(parts)
 
     print(f"[*] Đang gửi bài vào thread: {thread_target}...")
     success, post_id = bot.post_reply(thread_target, full_message)
@@ -776,7 +789,8 @@ def main():
             total_uploaded += 1
             print(f"    [+] BBCode chuẩn bị đăng:\n{bbcode}")
 
-            # Đăng lên Xamvn kèm tiêu đề (đã bỏ mô tả boilerplate)
+            # Đăng lên Xamvn theo thứ tự: Thumbnail -> Video -> Text
+            thumb_link = v.get("thumb_url") or zpic_info.get("frame_url", "")
             if args.post and bot_class:
                 ok, post_id = post_to_xamvn(
                     bot_class=bot_class,
@@ -785,6 +799,7 @@ def main():
                     thread_target=args.thread,
                     title=v["title"],
                     bbcode=bbcode,
+                    thumb_url=thumb_link,
                     base_url=args.base_url
                 )
                 if ok:
