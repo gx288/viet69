@@ -230,17 +230,36 @@ def get_hls_demuxer_args():
 
 
 def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=2):
-    """Download .m3u8 or .mp4 stream using FFmpeg with optional center watermark and skip black intro."""
-    hls_opts = get_hls_demuxer_args()
-    cmd = [
-        "ffmpeg",
-        "-headers", "Referer: https://emb.cd-vs.com/\r\n",
-        "-user_agent", USER_AGENT,
-        *hls_opts
-    ]
+    """Download .m3u8 or .mp4 stream using FFmpeg (or yt-dlp for Twitter/multi-track HLS) with optional center watermark and skip black intro."""
+    raw_source = stream_url
+    temp_ytdlp = None
+
+    # Twitter amplify_video / multi-rendition HLS works best via yt-dlp to merge highest video + audio tracks
+    if "twimg.com" in stream_url.lower():
+        temp_ytdlp = out_mp4 + ".ytdlp_raw.mp4"
+        if os.path.exists(temp_ytdlp):
+            try: os.remove(temp_ytdlp)
+            except Exception: pass
+        print(f"  [*] Phát hiện link Twitter/X, đang tải luồng chất lượng cao nhất qua yt-dlp...")
+        yt_cmd = [sys.executable, "-m", "yt_dlp", "--no-check-certificate", "-o", temp_ytdlp, stream_url]
+        res_yt = subprocess.run(yt_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if res_yt.returncode == 0 and os.path.exists(temp_ytdlp) and os.path.getsize(temp_ytdlp) > 1024:
+            raw_source = temp_ytdlp
+            # Twitter videos do not have the 2s black intro from Viet69
+            trim_start = 0
+
+    hls_opts = get_hls_demuxer_args() if raw_source.startswith("http") else []
+    referer = "https://x.com/" if "twimg.com" in stream_url.lower() else "https://emb.cd-vs.com/"
+    cmd = ["ffmpeg"]
+    if raw_source.startswith("http"):
+        cmd.extend([
+            "-headers", f"Referer: {referer}\r\n",
+            "-user_agent", USER_AGENT,
+            *hls_opts
+        ])
     if trim_start and trim_start > 0:
         cmd.extend(["-ss", str(trim_start)])
-    cmd.extend(["-i", stream_url])
+    cmd.extend(["-i", raw_source])
 
     if watermark_text:
         font_path = get_font_file()
@@ -271,7 +290,7 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
             "-movflags", "+faststart",
             "-y", out_mp4
         ])
-        print(f"  [*] Đang tải & đóng dấu watermark '{watermark_text}' (ultrafast): {stream_url[:70]}...")
+        print(f"  [*] Đang tải & đóng dấu watermark '{watermark_text}' (superfast): {stream_url[:70]}...")
     else:
         cmd.extend([
             "-c", "copy",
@@ -282,12 +301,17 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
         print(f"  [*] Đang tải luồng video gốc (copy): {stream_url[:80]}...")
 
     t0 = time.time()
-    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    elapsed = time.time() - t0
-    if res.returncode != 0 or not os.path.exists(out_mp4) or os.path.getsize(out_mp4) < 1024:
-        raise RuntimeError(f"FFmpeg tải video thất bại:\n{res.stderr[-600:]}")
-    print(f"  [+] Hoàn tất xử lý FFmpeg trong {elapsed:.1f} giây ({os.path.getsize(out_mp4)/(1024*1024):.2f} MB).")
-    return out_mp4
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        elapsed = time.time() - t0
+        if res.returncode != 0 or not os.path.exists(out_mp4) or os.path.getsize(out_mp4) < 1024:
+            raise RuntimeError(f"FFmpeg tải video thất bại:\n{res.stderr[-600:]}")
+        print(f"  [+] Hoàn tất xử lý FFmpeg trong {elapsed:.1f} giây ({os.path.getsize(out_mp4)/(1024*1024):.2f} MB).")
+        return out_mp4
+    finally:
+        if temp_ytdlp and os.path.exists(temp_ytdlp):
+            try: os.remove(temp_ytdlp)
+            except Exception: pass
 
 
 def resolve_target(target, db_by_id, db_by_url):

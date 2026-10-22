@@ -58,6 +58,8 @@ from upload_to_zpic import (
 POSTED_HISTORY_FILE = os.path.join(PROJECT_DIR, "data", "xamvn_posted_monthly.json")
 MONTHLY_VIDEOS_JSON = os.path.join(PROJECT_DIR, "data", "monthly_videos.json")
 ACTIVE_DOMAIN = "viet69.be"
+PRIORITY_SHEET_ID = os.getenv("PRIORITY_SHEET_ID", "1ZQTydO0y5CGfCaFCcw72F0LXzR5b63p_6yzttTUHTyY")
+PRIORITY_SHEET_TAB = os.getenv("PRIORITY_SHEET_TAB", "Queue")
 
 
 def get_cf_session():
@@ -106,7 +108,7 @@ def sync_to_xamvid_web(history: Dict[str, Any]):
 
         thumb = p.get("frame_url") or f"https://f.zzpi.cc/{vid_id}.fr.jpeg"
         post_id = p.get("post_id")
-        post_url = f"https://xamvn.yachts/posts/{post_id}/" if post_id else "https://xamvn.yachts/threads/307074/"
+        post_url = f"https://xamvn.yachts/posts/{post_id}/" if post_id else "https://xamvn.yachts/threads/311300/"
 
         web_items.append({
             "id": vid_id,
@@ -533,6 +535,7 @@ def ensure_video_on_zpic(
 ) -> Optional[Dict[str, Any]]:
     """
     Tải luồng video, cắt 2s đen, gắn thumbnail preview 1s ở đầu và upload lên Zpic.
+    Hỗ trợ cả link bài viết Viet69 (Cột 1) và link stream trực tiếp .m3u8/.mp4 hoặc HTML (Cột 2).
     """
     uploaded_list = []
     if os.path.exists(OUTPUT_JSON):
@@ -542,26 +545,50 @@ def ensure_video_on_zpic(
         except Exception:
             pass
 
-    target_url = video_item["url"].rstrip("/")
+    target_url = (video_item.get("url") or "").rstrip("/")
+    preset_stream = (video_item.get("stream_url") or "").strip()
+    preset_thumb = (video_item.get("thumb_url") or "").strip()
+
     for up in uploaded_list:
-        if up.get("source_post", "").rstrip("/") == target_url:
+        up_post = (up.get("source_post") or "").rstrip("/")
+        up_stream = (up.get("source_stream") or "").strip()
+        if (target_url and up_post == target_url) or (preset_stream and up_stream == preset_stream):
             print(f"[+] Video đã có sẵn trên Zpic: {up['zpic']['direct_mp4']}")
             video_item["description"] = up.get("description", "")
             return up
 
     os.makedirs(TEMP_DIR, exist_ok=True)
-    print(f"[*] Bóc tách luồng HLS & nội dung: {video_item['title']} ({video_item['url']})...")
-    try:
-        stream_url, real_title, description, thumb_url = extract_post_details(video_item["url"])
-    except Exception as e:
-        print(f"    [-] Lỗi khi bóc tách luồng ({e}). Bỏ qua video này để thử video tiếp theo...")
-        return None
+    stream_url = preset_stream or None
+    real_title = None
+    description = ""
+    thumb_url = preset_thumb or None
+
+    is_viet69_post = bool(target_url and ("viet69." in target_url.lower() and not target_url.lower().endswith((".m3u8", ".mp4"))))
+    if is_viet69_post:
+        print(f"[*] Bóc tách thông tin & luồng HLS từ Viet69: {video_item['title']} ({video_item['url']})...")
+        try:
+            v69_stream, v69_title, v69_desc, v69_thumb = extract_post_details(video_item["url"])
+            if not stream_url:
+                stream_url = v69_stream
+            if v69_title and v69_title != "Video":
+                real_title = v69_title
+            description = v69_desc or ""
+            if not thumb_url:
+                thumb_url = v69_thumb
+        except Exception as e:
+            print(f"    [!] Cảnh báo khi bóc tách trang Viet69 ({e}).")
+            if not stream_url:
+                return None
 
     if not stream_url:
         print(f"    [-] Không tìm thấy luồng stream hợp lệ cho bài viết này. Bỏ qua để thử video tiếp theo...")
         return None
 
-    video_item["title"] = real_title or video_item["title"]
+    # Nếu link stream từ Twitter/nguồn ngoài (không phải cd-vs.com của Viet69), không cắt 2s đầu
+    effective_trim = 0.0 if ("twimg.com" in stream_url.lower() or "cd-vs.com" not in stream_url.lower()) else trim_start
+
+    if real_title:
+        video_item["title"] = real_title
     video_item["description"] = description
     video_item["thumb_url"] = thumb_url
 
@@ -570,8 +597,8 @@ def ensure_video_on_zpic(
     final_mp4 = os.path.join(TEMP_DIR, f"final_{clean_slug(video_item['month'])}_{timestamp}.mp4")
 
     try:
-        # Bước 1: Tải và cắt 2s đầu đen + watermark
-        download_stream_to_mp4(stream_url, raw_mp4, watermark_text=watermark, trim_start=trim_start)
+        # Bước 1: Tải và cắt màn hình đen (nếu có) + watermark
+        download_stream_to_mp4(stream_url, raw_mp4, watermark_text=watermark, trim_start=effective_trim)
 
         # Bước 2: Cắt thumbnail về đúng kích thước video (ở giữa) và gắn vào đầu video 1s để làm preview
         print(f"  [*] Đang xử lý thumbnail preview từ '{thumb_url or 'frame giữa video'}' gắn vào đầu clip...")
@@ -588,8 +615,8 @@ def ensure_video_on_zpic(
             "description": description,
             "views": video_item.get("views"),
             "watermark": watermark,
-            "trim_start": trim_start,
-            "source_post": video_item["url"],
+            "trim_start": effective_trim,
+            "source_post": video_item["url"] or stream_url,
             "source_stream": stream_url,
             "uploaded_at": now_utc,
             "zpic": zpic_data
@@ -615,6 +642,286 @@ def ensure_video_on_zpic(
             if os.path.exists(p):
                 try: os.remove(p)
                 except Exception: pass
+
+
+def get_priority_sheet_worksheet(sheet_id: str = PRIORITY_SHEET_ID, tab_name: str = PRIORITY_SHEET_TAB):
+    """Kết nối tới Google Sheet hàng đợi ưu tiên (hỗ trợ cả Service Account trên GitHub Actions và OAuth local)."""
+    try:
+        import gspread
+        creds = None
+        creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        if creds_json:
+            creds_dict = json.loads(creds_json)
+            if creds_dict.get("type") == "service_account":
+                from google.oauth2.service_account import Credentials as SACredentials
+                creds = SACredentials.from_service_account_info(creds_dict, scopes=scopes)
+            else:
+                from google.oauth2.credentials import Credentials as UserCredentials
+                creds = UserCredentials.from_authorized_user_info(creds_dict)
+        else:
+            local_token = r"D:\AT\GoogleDrive_OAuth\token.json"
+            if os.path.exists(local_token):
+                from google.oauth2.credentials import Credentials as UserCredentials
+                creds = UserCredentials.from_authorized_user_file(local_token)
+
+        if not creds:
+            print("[!] Không tìm thấy GOOGLE_CREDENTIALS để kết nối Google Sheet ưu tiên.")
+            return None
+
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(sheet_id)
+        try:
+            return sh.worksheet(tab_name)
+        except Exception:
+            return sh.get_worksheet(0)
+    except Exception as e:
+        print(f"[!] Không thể kết nối Google Sheet ưu tiên ({e}).")
+        return None
+
+
+def parse_priority_sheet_row(col_a: str, col_b: str) -> Dict[str, str]:
+    """
+    Phân tích dữ liệu từ 2 cột của Google Sheet:
+    - Cột 1 (col_a): Link bài viết Viet69 (hoặc tiêu đề tùy chỉnh).
+    - Cột 2 (col_b): Link stream (.m3u8 / .mp4) và/hoặc mã HTML chứa poster/video.
+    """
+    import html as html_lib
+    col_a = (col_a or "").strip()
+    col_b_raw = html_lib.unescape((col_b or "").strip())
+
+    viet69_url = ""
+    custom_title = ""
+
+    if col_a:
+        # Kiểm tra xem Cột 1 có phải URL hoặc link viet69 không
+        url_match = re.search(r'(https?://[^\s"\'<>]+|(?:www\.)?viet69\.[a-z]+/[^\s"\'<>]+)', col_a, re.IGNORECASE)
+        if url_match:
+            raw_u = url_match.group(1)
+            if not raw_u.lower().startswith("http"):
+                raw_u = "https://" + raw_u.lstrip("/")
+            if not raw_u.endswith("/"):
+                raw_u += "/"
+            viet69_url = raw_u
+        else:
+            custom_title = col_a
+
+    stream_url = ""
+    thumb_url = ""
+
+    if col_b_raw:
+        # Tìm link stream .m3u8 hoặc .mp4 trong Cột 2
+        m_stream = re.search(r'(https?://[^\s"\'<>]+?\.(?:m3u8|mp4)(?:\?[^\s"\'<>]*)?)', col_b_raw, re.IGNORECASE)
+        if m_stream:
+            stream_url = m_stream.group(1)
+        elif col_b_raw.lower().startswith("http") and not re.search(r'\.(?:jpg|jpeg|png|webp)(?:\?|$)', col_b_raw, re.IGNORECASE):
+            stream_url = col_b_raw.split()[0]
+
+        # Tìm link ảnh poster/thumbnail trong Cột 2 (ví dụ: div class="plyr__poster" hoặc pbs.twimg.com)
+        m_thumb = re.search(r'(https?://[^\s"\'<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s"\'<>]*)?)', col_b_raw, re.IGNORECASE)
+        if m_thumb:
+            thumb_url = m_thumb.group(1)
+
+    # Tạo tiêu đề mặc định từ slug Viet69 nếu chưa có
+    fallback_title = custom_title
+    if not fallback_title and viet69_url:
+        slug_part = viet69_url.rstrip("/").split("/")[-1]
+        fallback_title = slug_part.replace("-", " ").capitalize() or "Video Hot Cập Nhật"
+    if not fallback_title:
+        fallback_title = "Video Hot Cập Nhật"
+
+    return {
+        "viet69_url": viet69_url,
+        "stream_url": stream_url,
+        "thumb_url": thumb_url,
+        "title": fallback_title
+    }
+
+
+def process_priority_sheet_queue(
+    args,
+    bot_class,
+    wm: Optional[str],
+    history: Dict[str, Any],
+    posted_urls: Set[str],
+    posted_titles: Set[str],
+    posted_hashes: Set[str],
+    month_counts: Dict[str, int]
+) -> Tuple[int, int]:
+    """
+    Quét Google Sheet ưu tiên trước tiên.
+    Lấy các dòng chưa có trạng thái 'Đã lấy', xử lý đăng lên Xamvn và đánh dấu 'Đã lấy' ngay lập tức.
+    Trả về: (uploaded_count, posted_count)
+    """
+    print("\n" + "=" * 70)
+    print(f">>> BƯỚC 1: KIỂM TRA GOOGLE SHEET ƯU TIÊN ({PRIORITY_SHEET_ID}) <<<")
+    print("=" * 70)
+
+    ws = get_priority_sheet_worksheet(PRIORITY_SHEET_ID, PRIORITY_SHEET_TAB)
+    if not ws:
+        print("[i] Bỏ qua bước kiểm tra Google Sheet ưu tiên (không kết nối được Sheet).")
+        return 0, 0
+
+    try:
+        rows = ws.get_all_values()
+    except Exception as e:
+        print(f"[-] Lỗi khi đọc dữ liệu từ Google Sheet: {e}")
+        return 0, 0
+
+    if len(rows) <= 1:
+        print("[i] Google Sheet ưu tiên hiện chưa có dữ liệu hàng đợi nào.")
+        return 0, 0
+
+    uploaded_count = 0
+    posted_count = 0
+    now_month = datetime.now().strftime("%Y/%m")
+
+    for row_idx in range(2, len(rows) + 1):
+        if args.max_posts_per_run and posted_count >= args.max_posts_per_run:
+            print(f"[+] Đã xử lý đủ {posted_count}/{args.max_posts_per_run} video từ Google Sheet ưu tiên cho lần chạy này.")
+            break
+
+        row = rows[row_idx - 1]
+        col_a = (row[0] if len(row) > 0 else "").strip()
+        col_b = (row[1] if len(row) > 1 else "").strip()
+        col_c = (row[2] if len(row) > 2 else "").strip()
+
+        if not col_a and not col_b:
+            continue
+
+        status_lower = col_c.lower()
+        if any(k in status_lower for k in ["đã lấy", "da lay", "done", "ok", "skip", "bỏ qua", "lỗi"]):
+            continue
+
+        parsed = parse_priority_sheet_row(col_a, col_b)
+        v_url = parsed["viet69_url"] or parsed["stream_url"]
+        if not v_url:
+            continue
+
+        print(f"\n--- [Google Sheet Dòng #{row_idx}] Phát hiện link ưu tiên chưa lấy ---")
+        print(f"    Cột 1 (Viet69): {parsed['viet69_url'] or '(Trống)'}")
+        print(f"    Cột 2 (Stream): {parsed['stream_url'] or '(Tự bóc tách từ Cột 1)'}")
+        if parsed["thumb_url"]:
+            print(f"    Ảnh Poster    : {parsed['thumb_url']}")
+
+        clean_v_url = v_url.rstrip("/")
+        clean_stream = parsed["stream_url"].rstrip("/") if parsed["stream_url"] else ""
+
+        if (clean_v_url and clean_v_url in posted_urls) or (clean_stream and clean_stream in posted_urls):
+            print(f"    [i] Video ở dòng #{row_idx} đã được đăng trước đó. Cập nhật trạng thái 'Đã lấy' trên Sheet...")
+            try:
+                ws.update(range_name=f"C{row_idx}", values=[["Đã lấy"]])
+            except Exception as e:
+                print(f"    [!] Lỗi cập nhật Sheet dòng #{row_idx}: {e}")
+            continue
+
+        v_item = {
+            "month": now_month,
+            "url": parsed["viet69_url"] or parsed["stream_url"],
+            "stream_url": parsed["stream_url"],
+            "thumb_url": parsed["thumb_url"],
+            "title": parsed["title"],
+            "views": "Hot Queue"
+        }
+
+        record = ensure_video_on_zpic(v_item, watermark=wm, trim_start=args.trim_start)
+        if not record:
+            print(f"    [-] Không thể tải/upload video dòng #{row_idx}. Đánh dấu lỗi để không kẹt hàng đợi.")
+            try:
+                ws.update(range_name=f"C{row_idx}", values=[["Lỗi stream"]])
+            except Exception:
+                pass
+            continue
+
+        zpic_info = record["zpic"]
+        direct_mp4 = zpic_info["direct_mp4"]
+        vid_hash = zpic_info["name"]
+        bbcode = zpic_info["bbcode_full"]
+        video_desc = record.get("description", "") or v_item.get("description", "")
+        final_title = v_item["title"]
+
+        uploaded_count += 1
+        print(f"    [+] BBCode chuẩn bị đăng:\n{bbcode}")
+
+        if args.post and bot_class:
+            thumb_link = v_item.get("thumb_url") or zpic_info.get("frame_url", "")
+            ok, post_id = post_to_xamvn(
+                bot_class=bot_class,
+                username=args.username,
+                password=args.password,
+                thread_target=args.thread,
+                title=final_title,
+                bbcode=bbcode,
+                thumb_url=thumb_link,
+                base_url=args.base_url
+            )
+            if ok:
+                posted_count += 1
+                month_counts[now_month] = month_counts.get(now_month, 0) + 1
+                post_link = f"https://xamvn.yachts/posts/{post_id}/" if post_id else args.thread
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                # Đánh dấu Đã lấy ngay lập tức trên Google Sheet
+                try:
+                    ws.update(
+                        range_name=f"C{row_idx}:F{row_idx}",
+                        values=[["Đã lấy", post_link, direct_mp4, now_str]]
+                    )
+                    print(f"    [+] Đã đánh dấu 'Đã lấy' vào dòng #{row_idx} trên Google Sheet!")
+                except Exception as e:
+                    print(f"    [!] Cảnh báo không ghi được trạng thái vào Google Sheet dòng #{row_idx}: {e}")
+
+                history_item = {
+                    "month": now_month,
+                    "title": final_title,
+                    "description": video_desc,
+                    "views": v_item["views"],
+                    "duration": zpic_info.get("duration", 0),
+                    "source_post": v_item["url"],
+                    "source_stream": parsed["stream_url"] or record.get("source_stream", ""),
+                    "zpic_mp4": direct_mp4,
+                    "frame_url": zpic_info.get("frame_url", ""),
+                    "zpic_viewer": zpic_info.get("viewer_url", ""),
+                    "post_id": post_id,
+                    "posted_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+                }
+                history["posted"].append(history_item)
+
+                if clean_v_url:
+                    posted_urls.add(clean_v_url)
+                if clean_stream:
+                    posted_urls.add(clean_stream)
+                posted_titles.add(final_title.strip().lower())
+                posted_hashes.add(vid_hash)
+
+                save_posted_history(history)
+                sync_to_xamvid_web(history)
+                print(f"    [SUCCESS] Đăng bài từ Google Sheet thành công (Post ID: {post_id})!")
+
+                if args.max_posts_per_run and posted_count >= args.max_posts_per_run:
+                    break
+                print(f"    ⏳ Tạm nghỉ {args.delay_between_posts}s chống flood forum...")
+                time.sleep(args.delay_between_posts)
+            else:
+                print(f"    [-] Đăng bài lên Xamvn thất bại cho dòng #{row_idx}!")
+        else:
+            # Chế độ chỉ upload không post Xamvn
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                ws.update(
+                    range_name=f"C{row_idx}:F{row_idx}",
+                    values=[["Đã lấy (Zpic)", "", direct_mp4, now_str]]
+                )
+            except Exception:
+                pass
+
+    if posted_count == 0:
+        print("[i] Không còn link nào chờ xử lý trong Google Sheet ưu tiên. Chuyển sang quét Top Viet69 hàng tháng...")
+
+    return uploaded_count, posted_count
 
 
 def post_to_xamvn(
@@ -706,6 +1013,8 @@ def main():
             clean_u = item["source_post"].rstrip("/")
             posted_urls.add(clean_u)
             posted_urls.add(clean_u.split("/")[-1])
+        if item.get("source_stream"):
+            posted_urls.add(item["source_stream"].rstrip("/"))
         if item.get("title"):
             posted_titles.add(item["title"].strip().lower())
         if item.get("zpic_mp4"):
@@ -723,6 +1032,7 @@ def main():
 
     print("=" * 70)
     print("🎬 VIET69 MONTHLY TOP BACKWARDS TO ZPIC, XAMVN & XAMVID WEB")
+    print(f"Sheet Ưu Tiên   : https://docs.google.com/spreadsheets/d/{PRIORITY_SHEET_ID}/edit")
     print(f"Danh sách tháng : {all_months}")
     print(f"Số video/tháng  : tối đa {args.limit_per_month}")
     print(f"Số video/lần chạy: tối đa {args.max_posts_per_run}")
@@ -750,6 +1060,21 @@ def main():
     total_uploaded = 0
     total_posted = 0
 
+    # BƯỚC 1: Ưu tiên xử lý danh sách link từ Google Sheet trước tiên
+    sheet_up, sheet_post = process_priority_sheet_queue(
+        args=args,
+        bot_class=bot_class,
+        wm=wm,
+        history=history,
+        posted_urls=posted_urls,
+        posted_titles=posted_titles,
+        posted_hashes=posted_hashes,
+        month_counts=month_counts
+    )
+    total_uploaded += sheet_up
+    total_posted += sheet_post
+
+    # BƯỚC 2: Chỉ khi Google Sheet ưu tiên đã hết link (hoặc chưa đủ max_posts_per_run) mới quét Top Viet69 theo tháng
     for m in all_months:
         if args.max_posts_per_run and total_posted >= args.max_posts_per_run:
             print(f"\n[+] Đã đăng đủ giới hạn {args.max_posts_per_run} video cho lần chạy hôm nay. Dừng quy trình.")

@@ -47,6 +47,7 @@ jobs:
 
       - name: 🎬 Run Daily Top Video Poster
         env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           XAMVN_USERNAME: ${{ secrets.XAMVN_USERNAME || 'cudai2m' }}
           XAMVN_PASSWORD: ${{ secrets.XAMVN_PASSWORD || 'lehunghup' }}
           XAMVN_THREAD: "https://xamvn.yachts/threads/311300/"
