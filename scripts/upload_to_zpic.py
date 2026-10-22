@@ -233,6 +233,19 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
     """Download .m3u8 or .mp4 stream using FFmpeg (or yt-dlp for Twitter/multi-track HLS) with optional center watermark and skip black intro."""
     raw_source = stream_url
     temp_ytdlp = None
+    stream_duration = 0.0
+
+    try:
+        pr = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", stream_url],
+            capture_output=True, text=True, timeout=12
+        )
+        if pr.returncode == 0 and pr.stdout.strip():
+            stream_duration = float(pr.stdout.strip().splitlines()[0])
+    except Exception:
+        pass
+
+    is_long_video = stream_duration > 1200  # > 20 minutes
 
     # Twitter amplify_video / multi-rendition HLS works best via yt-dlp to merge highest video + audio tracks
     if "twimg.com" in stream_url.lower():
@@ -240,12 +253,12 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
         if os.path.exists(temp_ytdlp):
             try: os.remove(temp_ytdlp)
             except Exception: pass
-        print(f"  [*] Phát hiện link Twitter/X, đang tải luồng chất lượng cao nhất qua yt-dlp...")
-        yt_cmd = [sys.executable, "-m", "yt_dlp", "--no-check-certificate", "-o", temp_ytdlp, stream_url]
+        fmt_sel = "bestvideo[height<=360]+bestaudio/best[height<=360]/best" if is_long_video else "bestvideo+bestaudio/best"
+        print(f"  [*] Phát hiện link Twitter/X ({stream_duration/60:.1f} phút), đang tải qua yt-dlp (-N 16, format={fmt_sel})...")
+        yt_cmd = [sys.executable, "-m", "yt_dlp", "--no-check-certificate", "-N", "16", "-f", fmt_sel, "-o", temp_ytdlp, stream_url]
         res_yt = subprocess.run(yt_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if res_yt.returncode == 0 and os.path.exists(temp_ytdlp) and os.path.getsize(temp_ytdlp) > 1024:
             raw_source = temp_ytdlp
-            # Twitter videos do not have the 2s black intro from Viet69
             trim_start = 0
 
     hls_opts = get_hls_demuxer_args() if raw_source.startswith("http") else []
@@ -265,7 +278,6 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
         font_path = get_font_file()
         safe_text = watermark_text.replace(":", "\\:").replace("'", "\\'")
         font_opt = f"fontfile='{font_path}':" if font_path else ""
-        # Subtle center watermark: 35% opacity white with thin 25% black border
         drawtext = (
             f"drawtext={font_opt}text='{safe_text}':"
             f"fontsize=min(w\\,h)/16:"
@@ -273,11 +285,19 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
             f"borderw=1:bordercolor=black@0.25:"
             f"x=(w-text_w)/2:y=(h-text_h)/2"
         )
+        preset_val = "ultrafast" if is_long_video else "superfast"
+        crf_val = "28" if is_long_video else "25"
+        rate_args = []
+        if is_long_video and stream_duration > 0:
+            max_kbps = max(220, int((220 * 8192) / stream_duration) - 96)
+            rate_args = ["-maxrate", f"{max_kbps}k", "-bufsize", f"{max_kbps*2}k"]
+
         cmd.extend([
             "-vf", f"{drawtext},format=yuv420p",
             "-c:v", "libx264",
-            "-preset", "superfast",
-            "-crf", "25",
+            "-preset", preset_val,
+            "-crf", crf_val,
+            *rate_args,
             "-profile:v", "high",
             "-level", "4.0",
             "-x264-params", "stitchable=1",
@@ -286,11 +306,11 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
             "-c:a", "aac",
             "-ar", "44100",
             "-ac", "2",
-            "-b:a", "128k",
+            "-b:a", "96k" if is_long_video else "128k",
             "-movflags", "+faststart",
             "-y", out_mp4
         ])
-        print(f"  [*] Đang tải & đóng dấu watermark '{watermark_text}' (superfast): {stream_url[:70]}...")
+        print(f"  [*] Đang tải & đóng dấu watermark '{watermark_text}' ({preset_val}): {stream_url[:70]}...")
     else:
         cmd.extend([
             "-c", "copy",

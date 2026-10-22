@@ -707,10 +707,35 @@ def get_priority_sheet_worksheet(sheet_id: str = PRIORITY_SHEET_ID, tab_name: st
         return None
 
 
+def translate_to_vietnamese(text: str) -> str:
+    """
+    Tự động dịch tiêu đề tiếng Trung / Anh / Nhật từ bad.news sang tiếng Việt tự nhiên.
+    """
+    if not text or not text.strip():
+        return "Video Hot Cập Nhật"
+    clean_text = re.sub(r"\s+", " ", text).strip()
+    # Nếu chuỗi chỉ chứa ký tự Latin/tiếng Việt bình thường (không có chữ Hán/Nhật/Hàn), kiểm tra nhanh
+    has_cjk = bool(re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", clean_text))
+    try:
+        from urllib.parse import quote
+        import requests as std_requests
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=vi&dt=t&q={quote(clean_text)}"
+        r = std_requests.get(url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            translated = "".join(seg[0] for seg in data[0] if seg and seg[0]).strip()
+            if translated:
+                print(f"  [+] Đã dịch tiêu đề sang tiếng Việt: {translated}")
+                return translated
+    except Exception as e:
+        print(f"  [!] Cảnh báo dịch tiêu đề ({e})")
+    return clean_text if not has_cjk else "Video Hot Cập Nhật"
+
+
 def extract_badnews_details(badnews_url: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
-    Tự động bóc tách link stream (.m3u8 / .mp4), ảnh poster thumbnail và tiêu đề từ trang https://bad.news/t/...
-    Trả về: (stream_url, thumb_url, title)
+    Tự động bóc tách link stream (.m3u8 / .mp4), ảnh poster thumbnail và tiêu đề (đã dịch sang tiếng Việt) từ trang https://bad.news/t/...
+    Trả về: (stream_url, thumb_url, translated_vi_title)
     """
     from bs4 import BeautifulSoup
     if not badnews_url.lower().startswith("http"):
@@ -766,21 +791,25 @@ def extract_badnews_details(badnews_url: str) -> Tuple[Optional[str], Optional[s
             thumb_url = og_img.get("content")
 
     og_title = soup.find("meta", property="og:title")
-    title = og_title.get("content", "").strip() if og_title else (soup.title.get_text(strip=True) if soup.title else "")
+    raw_title = og_title.get("content", "").strip() if og_title else (soup.title.get_text(strip=True) if soup.title else "")
+    vi_title = translate_to_vietnamese(raw_title) if raw_title else "Video Hot Cập Nhật"
 
     if stream_url:
         print(f"  [+] Bóc tách thành công từ bad.news ({badnews_url}):")
-        print(f"      -> Stream : {stream_url}")
+        print(f"      -> Tiêu đề gốc : {raw_title}")
+        print(f"      -> Dịch TV     : {vi_title}")
+        print(f"      -> Stream      : {stream_url}")
         if thumb_url:
-            print(f"      -> Poster : {thumb_url}")
-    return stream_url, thumb_url, title
+            print(f"      -> Poster      : {thumb_url}")
+    return stream_url, thumb_url, vi_title
 
 
 def parse_priority_sheet_row(col_a: str, col_b: str) -> Dict[str, str]:
     """
-    Phân tích dữ liệu từ 2 cột của Google Sheet:
-    - Cột 1 (col_a): Link bài viết Viet69 (hoặc tiêu đề tùy chỉnh).
-    - Cột 2 (col_b): Link https://bad.news/t/... hoặc link stream (.m3u8 / .mp4) và/hoặc mã HTML chứa poster/video.
+    Phân loại link và chọn nhánh xử lý phù hợp cho từng dòng trên Google Sheet:
+    - Loại 'viet69' : Link bài viết Viet69 (lấy tiêu đề tiếng Việt từ Viet69, cắt 2s đen đầu video).
+    - Loại 'badnews': Link bài viết https://bad.news/t/... (bóc tách m3u8/mp4 + poster, tự động dịch tiêu đề sang tiếng Việt, không cắt 2s đầu).
+    - Loại 'stream' : Link stream trực tiếp (.m3u8 / .mp4 / HTML).
     """
     import html as html_lib
     col_a = (col_a or "").strip()
@@ -789,6 +818,7 @@ def parse_priority_sheet_row(col_a: str, col_b: str) -> Dict[str, str]:
     viet69_url = ""
     badnews_url = ""
     custom_title = ""
+    link_type = "stream"
 
     if col_a:
         bn_in_a = re.search(r"(https?://(?:www\.)?bad\.news/[^\s\"'<>]+|(?:www\.)?bad\.news/[^\s\"'<>]+)", col_a, re.IGNORECASE)
@@ -796,27 +826,35 @@ def parse_priority_sheet_row(col_a: str, col_b: str) -> Dict[str, str]:
             badnews_url = bn_in_a.group(1)
             if not badnews_url.lower().startswith("http"):
                 badnews_url = "https://" + badnews_url.lstrip("/")
+            link_type = "badnews"
         else:
             url_match = re.search(r"(https?://[^\s\"'<>]+|(?:www\.)?viet69\.[a-z]+/[^\s\"'<>]+)", col_a, re.IGNORECASE)
-            if url_match:
+            if url_match and "viet69." in url_match.group(1).lower():
                 raw_u = url_match.group(1)
                 if not raw_u.lower().startswith("http"):
                     raw_u = "https://" + raw_u.lstrip("/")
                 if not raw_u.endswith("/"):
                     raw_u += "/"
                 viet69_url = raw_u
+                link_type = "viet69"
+            elif url_match:
+                raw_u = url_match.group(1)
+                if not raw_u.lower().startswith("http"):
+                    raw_u = "https://" + raw_u.lstrip("/")
+                viet69_url = raw_u
             else:
-                custom_title = col_a
+                custom_title = translate_to_vietnamese(col_a)
 
     stream_url = ""
     thumb_url = ""
 
     if col_b_raw:
         bn_match = re.search(r"(https?://(?:www\.)?bad\.news/[^\s\"'<>]+|(?:www\.)?bad\.news/[^\s\"'<>]+)", col_b_raw, re.IGNORECASE)
-        if bn_match:
+        if bn_match and not viet69_url:
             badnews_url = bn_match.group(1)
             if not badnews_url.lower().startswith("http"):
                 badnews_url = "https://" + badnews_url.lstrip("/")
+            link_type = "badnews"
         else:
             m_stream = re.search(r"(https?://[^\s\"'<>]+?\.(?:m3u8|mp4)(?:\?[^\s\"'<>]*)?)", col_b_raw, re.IGNORECASE)
             if m_stream:
@@ -828,13 +866,13 @@ def parse_priority_sheet_row(col_a: str, col_b: str) -> Dict[str, str]:
             if m_thumb:
                 thumb_url = m_thumb.group(1)
 
-    if badnews_url and not stream_url:
+    if link_type == "badnews" and badnews_url:
         bn_stream, bn_thumb, bn_title = extract_badnews_details(badnews_url)
-        if bn_stream:
+        if bn_stream and not stream_url:
             stream_url = bn_stream
         if bn_thumb and not thumb_url:
             thumb_url = bn_thumb
-        if bn_title and not custom_title and not viet69_url:
+        if bn_title and not custom_title:
             custom_title = bn_title
 
     fallback_title = custom_title
@@ -845,6 +883,7 @@ def parse_priority_sheet_row(col_a: str, col_b: str) -> Dict[str, str]:
         fallback_title = "Video Hot Cập Nhật"
 
     return {
+        "link_type": link_type,
         "viet69_url": viet69_url,
         "badnews_url": badnews_url,
         "stream_url": stream_url,
@@ -903,21 +942,20 @@ def process_priority_sheet_queue(
 
         if not col_a and not col_b:
             continue
-        if not col_b and not any(k in col_a.lower() for k in ["bad.news", ".m3u8", ".mp4"]):
-            continue
 
         status_lower = col_c.lower()
         if any(k in status_lower for k in ["đã lấy", "da lay", "done", "ok", "skip", "bỏ qua", "lỗi"]):
             continue
 
         parsed = parse_priority_sheet_row(col_a, col_b)
-        v_url = parsed["viet69_url"] or parsed["stream_url"]
+        v_url = parsed.get("badnews_url") or parsed["viet69_url"] or parsed["stream_url"]
         if not v_url:
             continue
 
-        print(f"\n--- [Google Sheet Dòng #{row_idx}] Phát hiện link ưu tiên chưa lấy ---")
-        print(f"    Cột 1 (Viet69): {parsed['viet69_url'] or '(Trống)'}")
-        print(f"    Cột 2 (Stream): {parsed['stream_url'] or '(Tự bóc tách từ Cột 1)'}")
+        print(f"\n--- [Google Sheet Dòng #{row_idx}] Phân loại: [{parsed.get('link_type', 'stream').upper()}] ---")
+        print(f"    Link nguồn    : {v_url}")
+        print(f"    Tiêu đề       : {parsed['title']}")
+        print(f"    Stream M3U8   : {parsed['stream_url'] or '(Tự bóc tách khi tải)'}")
         if parsed["thumb_url"]:
             print(f"    Ảnh Poster    : {parsed['thumb_url']}")
 
@@ -980,9 +1018,10 @@ def process_priority_sheet_queue(
 
                 # Đánh dấu Đã lấy ngay lập tức trên Google Sheet
                 try:
+                    final_stream_col = record.get("source_stream") or col_b
                     ws.update(
-                        range_name=f"C{row_idx}:F{row_idx}",
-                        values=[["Đã lấy", post_link, direct_mp4, now_str]]
+                        range_name=f"B{row_idx}:F{row_idx}",
+                        values=[[final_stream_col, "Đã lấy", post_link, direct_mp4, now_str]]
                     )
                     print(f"    [+] Đã đánh dấu 'Đã lấy' vào dòng #{row_idx} trên Google Sheet!")
                 except Exception as e:
