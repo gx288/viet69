@@ -1,16 +1,17 @@
 name: "1. Tải Video & Upload Zpic (Kho Dự Trữ)"
 
 on:
-  # Chỉ chạy tự động 1 lần/ngày lúc 11:00 trưa giờ VN (04:00 UTC) để tải sẵn 3 video vào kho Zpic
+  # Chạy 30 phút 1 lần từ 19:15 tối đến 01:15 sáng giờ Việt Nam (tương ứng 12:15 -> 18:15 giờ UTC)
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '15,45 12-17 * * *'
+    - cron: '15 18 * * *'
   workflow_dispatch:
     inputs:
       max_uploads_per_run:
-        description: 'Số video cần tải & up lên Zpic trong lần chạy này (mặc định: 3)'
+        description: 'Số video cần tải & up lên Zpic trong lần chạy này (mặc định: 1)'
         required: false
         type: string
-        default: '3'
+        default: '1'
       targets:
         description: 'Tuỳ chọn: Nhập trực tiếp Link cần tải (để trống sẽ tự lấy từ Google Sheet Ưu Tiên)'
         required: false
@@ -24,6 +25,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: zpic-upload-buffer
+  cancel-in-progress: false
 
 jobs:
   upload-to-zpic:
@@ -59,7 +64,7 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
-          MAX_UP="${{ github.event.inputs.max_uploads_per_run || '3' }}"
+          MAX_UP="${{ github.event.inputs.max_uploads_per_run || '1' }}"
           WM="${{ github.event.inputs.watermark || 'xamvid.netlify.app' }}"
           TARGETS="${{ github.event.inputs.targets || '' }}"
 

@@ -1,15 +1,9 @@
 name: "2. Đăng Nhập & Comment Video Xamvn (Tùy Chỉnh Tần Suất)"
 
 on:
-  # =========================================================================
-  # TÙY CHỈNH THỜI GIAN & TẦN SUẤT COMMENT TẠI ĐÂY (Giờ Việt Nam = Giờ UTC + 7)
-  # - Mặc định đang để 3 lần/ngày lúc: 12:00 trưa, 18:00 chiều, 22:00 tối giờ VN
-  # - Nếu muốn chạy mỗi 3 tiếng 1 lần: đổi thành  '0 */3 * * *'
-  # - Nếu muốn chạy mỗi 2 tiếng từ 11h trưa -> 23h đêm VN: đổi thành '0 4,6,8,10,12,14,16 * * *'
-  # - Nếu chỉ muốn chạy ngày 1 lần lúc 12h trưa VN: đổi thành '0 5 * * *'
-  # =========================================================================
+  # Chạy định kỳ mỗi 1 tiếng 1 lần (đồng thời kết hợp cron-job.org gọi chính xác theo phút)
   schedule:
-    - cron: '0 5,11,15 * * *'
+    - cron: '0 * * * *'
 
   workflow_dispatch:
     inputs:
@@ -31,6 +25,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: xamvn-comment-video
+  cancel-in-progress: false
 
 jobs:
   comment-xamvn:
