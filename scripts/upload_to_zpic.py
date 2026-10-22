@@ -229,40 +229,96 @@ def get_hls_demuxer_args():
     return args
 
 
-def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=2):
-    """Download .m3u8 or .mp4 stream using FFmpeg (or yt-dlp for Twitter/multi-track HLS) with optional center watermark and skip black intro."""
-    raw_source = stream_url
-    temp_ytdlp = None
-    stream_duration = 0.0
-
+def get_stream_duration(stream_url, referer="https://emb.cd-vs.com/"):
+    """Lấy chính xác thời lượng (giây) của luồng .m3u8 / .mp4 hoặc file local."""
+    # 1. Thử ffprobe có kèm headers
     try:
-        pr = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", stream_url],
-            capture_output=True, text=True, timeout=12
-        )
+        cmd = ["ffprobe", "-v", "error"]
+        if str(stream_url).startswith("http"):
+            cmd.extend([
+                "-headers", f"Referer: {referer}\r\n",
+                "-user_agent", USER_AGENT
+            ])
+        cmd.extend([
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            stream_url
+        ])
+        pr = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
         if pr.returncode == 0 and pr.stdout.strip():
-            stream_duration = float(pr.stdout.strip().splitlines()[0])
+            for line in pr.stdout.strip().splitlines():
+                try:
+                    val = float(line.strip())
+                    if val > 0:
+                        return val
+                except Exception:
+                    pass
     except Exception:
         pass
 
-    is_long_video = stream_duration > 1200  # > 20 minutes
+    # 2. Nếu là link .m3u8, thử đọc tổng #EXTINF từ playlist
+    if ".m3u8" in str(stream_url).lower() and str(stream_url).startswith("http"):
+        try:
+            from curl_cffi import requests as cf_requests
+            from urllib.parse import urljoin
+            s = cf_requests.Session()
+            r = s.get(stream_url, headers={"Referer": referer, "User-Agent": USER_AGENT}, impersonate="chrome120", timeout=10)
+            if r.status_code == 200:
+                text = r.text
+                # Nếu là master playlist, lấy sub-playlist đầu tiên
+                if "#EXT-X-STREAM-INF" in text:
+                    for line in text.splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            sub_url = urljoin(stream_url, line)
+                            r2 = s.get(sub_url, headers={"Referer": referer, "User-Agent": USER_AGENT}, impersonate="chrome120", timeout=10)
+                            if r2.status_code == 200:
+                                text = r2.text
+                            break
+                extinfs = re.findall(r"#EXTINF:([0-9.]+)", text)
+                if extinfs:
+                    total_dur = sum(float(x) for x in extinfs)
+                    if total_dur > 0:
+                        return total_dur
+        except Exception:
+            pass
 
-    # Twitter amplify_video / multi-rendition HLS works best via yt-dlp to merge highest video + audio tracks
+    return 0.0
+
+
+def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=2, max_target_mb=190):
+    """
+    Download .m3u8 or .mp4 stream using FFmpeg (or yt-dlp for Twitter/multi-track HLS)
+    with optional center watermark, skip black intro, and strict file size control (< max_target_mb MB for Zpic.org).
+    """
+    raw_source = stream_url
+    temp_ytdlp = None
+    referer = "https://x.com/" if "twimg.com" in stream_url.lower() else "https://emb.cd-vs.com/"
+    stream_duration = get_stream_duration(stream_url, referer=referer)
+
+    is_long_video = stream_duration > 1000  # > ~16.5 minutes
+
+    # Twitter amplify_video / multi-rendition HLS works best via yt-dlp to merge video + audio tracks
     if "twimg.com" in stream_url.lower():
         temp_ytdlp = out_mp4 + ".ytdlp_raw.mp4"
         if os.path.exists(temp_ytdlp):
             try: os.remove(temp_ytdlp)
             except Exception: pass
-        fmt_sel = "bestvideo[height<=360]+bestaudio/best[height<=360]/best" if is_long_video else "bestvideo+bestaudio/best"
-        print(f"  [*] Phát hiện link Twitter/X ({stream_duration/60:.1f} phút), đang tải qua yt-dlp (-N 16, format={fmt_sel})...")
+        # Nếu video dài > 16 phút, chọn bản <= 360p/480p ngay từ đầu để tải siêu nhanh và nhẹ
+        fmt_sel = "bestvideo[height<=360]+bestaudio/best[height<=360]/best" if is_long_video else "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+        print(f"  [*] Phát hiện link Twitter/X (thời lượng: {stream_duration/60:.1f} phút), đang tải qua yt-dlp (-N 16, format={fmt_sel})...")
         yt_cmd = [sys.executable, "-m", "yt_dlp", "--no-check-certificate", "-N", "16", "-f", fmt_sel, "-o", temp_ytdlp, stream_url]
         res_yt = subprocess.run(yt_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if res_yt.returncode == 0 and os.path.exists(temp_ytdlp) and os.path.getsize(temp_ytdlp) > 1024:
             raw_source = temp_ytdlp
             trim_start = 0
+            # Đo lại chính xác thời lượng từ file local vừa tải
+            local_dur = get_stream_duration(temp_ytdlp)
+            if local_dur > 0:
+                stream_duration = local_dur
+                is_long_video = stream_duration > 1000
 
     hls_opts = get_hls_demuxer_args() if raw_source.startswith("http") else []
-    referer = "https://x.com/" if "twimg.com" in stream_url.lower() else "https://emb.cd-vs.com/"
     cmd = ["ffmpeg"]
     if raw_source.startswith("http"):
         cmd.extend([
@@ -273,6 +329,15 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
     if trim_start and trim_start > 0:
         cmd.extend(["-ss", str(trim_start)])
     cmd.extend(["-i", raw_source])
+
+    # Tính toán giới hạn bitrate tự động để file đầu ra KHÔNG BAO GIỜ vượt quá max_target_mb (mặc định 190 MB, an toàn tuyệt đối dưới mức 300 MB của Zpic)
+    effective_dur = max(60.0, stream_duration - (trim_start or 0)) if stream_duration > 0 else 900.0
+    audio_kbps = 96 if is_long_video else 128
+    # Công thức: (MB * 8192 kilobits) / seconds
+    calc_max_v_kbps = int((max_target_mb * 8192) / effective_dur) - audio_kbps
+    # Giới hạn trần bitrate hợp lý (tối thiểu 200k cho clip siêu dài >1 tiếng, tối đa 1400k cho clip ngắn)
+    max_v_kbps = max(200, min(1400, calc_max_v_kbps))
+    buf_kbps = max_v_kbps * 2
 
     if watermark_text:
         font_path = get_font_file()
@@ -285,19 +350,19 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
             f"borderw=1:bordercolor=black@0.25:"
             f"x=(w-text_w)/2:y=(h-text_h)/2"
         )
+        # Nếu video dài (>16.5 phút hoặc max_v_kbps < 550k), tự động hạ độ phân giải xuống tối đa 480p để hình vẫn nét ở bitrate thấp và encode nhanh gấp 3 lần
+        scale_prefix = "scale=-2:'min(480,ih)'," if (is_long_video or max_v_kbps < 550) else ""
+        vf_chain = f"{scale_prefix}{drawtext},format=yuv420p"
         preset_val = "ultrafast" if is_long_video else "superfast"
         crf_val = "28" if is_long_video else "25"
-        rate_args = []
-        if is_long_video and stream_duration > 0:
-            max_kbps = max(220, int((220 * 8192) / stream_duration) - 96)
-            rate_args = ["-maxrate", f"{max_kbps}k", "-bufsize", f"{max_kbps*2}k"]
 
         cmd.extend([
-            "-vf", f"{drawtext},format=yuv420p",
+            "-vf", vf_chain,
             "-c:v", "libx264",
             "-preset", preset_val,
             "-crf", crf_val,
-            *rate_args,
+            "-maxrate", f"{max_v_kbps}k",
+            "-bufsize", f"{buf_kbps}k",
             "-profile:v", "high",
             "-level", "4.0",
             "-x264-params", "stitchable=1",
@@ -306,15 +371,17 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
             "-c:a", "aac",
             "-ar", "44100",
             "-ac", "2",
-            "-b:a", "96k" if is_long_video else "128k",
+            "-b:a", f"{audio_kbps}k",
+            "-fs", "250M",
             "-movflags", "+faststart",
             "-y", out_mp4
         ])
-        print(f"  [*] Đang tải & đóng dấu watermark '{watermark_text}' ({preset_val}): {stream_url[:70]}...")
+        print(f"  [*] Đang tải & đóng dấu watermark '{watermark_text}' ({preset_val}, thời lượng={stream_duration/60:.1f}p, maxrate={max_v_kbps}k, giới hạn <={max_target_mb}MB): {stream_url[:65]}...")
     else:
         cmd.extend([
             "-c", "copy",
             "-bsf:a", "aac_adtstoasc",
+            "-fs", "250M",
             "-movflags", "+faststart",
             "-y", out_mp4
         ])
@@ -326,7 +393,8 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
         elapsed = time.time() - t0
         if res.returncode != 0 or not os.path.exists(out_mp4) or os.path.getsize(out_mp4) < 1024:
             raise RuntimeError(f"FFmpeg tải video thất bại:\n{res.stderr[-600:]}")
-        print(f"  [+] Hoàn tất xử lý FFmpeg trong {elapsed:.1f} giây ({os.path.getsize(out_mp4)/(1024*1024):.2f} MB).")
+        size_mb = os.path.getsize(out_mp4) / (1024 * 1024)
+        print(f"  [+] Hoàn tất xử lý FFmpeg trong {elapsed:.1f} giây ({size_mb:.2f} MB).")
         return out_mp4
     finally:
         if temp_ytdlp and os.path.exists(temp_ytdlp):
