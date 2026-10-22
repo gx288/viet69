@@ -239,21 +239,45 @@ def extract_post_details(post_url: str) -> Tuple[Optional[str], str, str, Option
         if not movie_id:
             continue
 
-        # Trường hợp 1: Base64 direct link (type 19, 20)
-        if video_type in ["19", "20"]:
+        # Trường hợp 1: Base64 direct link (type 19, 20, 22)
+        if video_type in ["19", "20", "22"]:
             try:
                 pad = len(movie_id) % 4
-                if pad:
-                    movie_id += '=' * (4 - pad)
-                decoded = base64.b64decode(movie_id).decode('utf-8', errors='ignore')
+                b64_m = movie_id + ('=' * (4 - pad) if pad else '')
+                decoded = base64.b64decode(b64_m).decode('utf-8', errors='ignore').strip()
                 if decoded:
-                    direct_url = f"https://cdn.cd-vs.com/{decoded}"
-                    print(f"  [+] Bóc tách thành công từ {btn_text} (Base64): {direct_url}")
+                    cdn_host = "cdn2.cd-vs.com" if video_type == "22" or decoded.startswith("videos/") else "cdn.cd-vs.com"
+                    direct_url = decoded if decoded.startswith("http") else f"https://{cdn_host}/{decoded.lstrip('/')}"
+                    print(f"  [+] Bóc tách thành công từ {btn_text} (Base64 type {video_type}): {direct_url}")
                     return direct_url, title, description, thumb_url
             except Exception:
                 pass
 
-        # Trường hợp 2: AJAX Endpoint (type 25, 10, v.v.)
+        # Trường hợp 2: Base64 UUID của emb.cd-vs.com (type 25) -> gọi thẳng api/get-video không cần qua get.video.php (tránh bị Cloudflare chặn POST trên GitHub Actions)
+        try:
+            pad = len(movie_id) % 4
+            b64_str = movie_id + ('=' * (4 - pad) if pad else '')
+            decoded_id = base64.b64decode(b64_str).decode('utf-8', errors='ignore').strip()
+            if re.match(r'^[0-9a-fA-F-]{32,36}$', decoded_id):
+                embed_url = f"https://emb.cd-vs.com/embed/{decoded_id}"
+                api_url = f"https://emb.cd-vs.com/api/get-video?id={decoded_id}&counter=0&tried_ids="
+                api_headers = {
+                    "User-Agent": USER_AGENT,
+                    "Referer": embed_url,
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Origin": "https://emb.cd-vs.com"
+                }
+                api_res = session.get(api_url, headers=api_headers, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=12)
+                if api_res.status_code == 200:
+                    vdata = api_res.json()
+                    urls = vdata.get("urls") if isinstance(vdata.get("urls"), list) else ([vdata["url"]] if vdata.get("url") else [])
+                    if urls and urls[0]:
+                        print(f"  [+] Bóc tách thành công luồng từ {btn_text} (Direct UUID): {urls[0]}")
+                        return urls[0], title, description, thumb_url
+        except Exception:
+            pass
+
+        # Trường hợp 3: AJAX Endpoint (type 25, 10, v.v.)
         ajax_url = f"https://{ACTIVE_DOMAIN}/get.xvideo.php" if video_type == "10" else f"https://{ACTIVE_DOMAIN}/get.video.php"
         payload = f"movie_id={movie_id}&type={video_type}&index=1"
         ajax_headers = {
