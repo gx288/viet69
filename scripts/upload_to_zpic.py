@@ -255,12 +255,19 @@ def download_stream_to_mp4(stream_url, out_mp4, watermark_text=None, trim_start=
             f"x=(w-text_w)/2:y=(h-text_h)/2"
         )
         cmd.extend([
-            "-vf", drawtext,
+            "-vf", f"{drawtext},format=yuv420p",
             "-c:v", "libx264",
             "-preset", "superfast",
             "-crf", "25",
-            "-c:a", "copy",
-            "-bsf:a", "aac_adtstoasc",
+            "-profile:v", "high",
+            "-level", "4.0",
+            "-x264-params", "stitchable=1",
+            "-r", "30",
+            "-video_track_timescale", "15360",
+            "-c:a", "aac",
+            "-ar", "44100",
+            "-ac", "2",
+            "-b:a", "128k",
             "-movflags", "+faststart",
             "-y", out_mp4
         ])

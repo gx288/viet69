@@ -49,13 +49,14 @@ jobs:
         env:
           XAMVN_USERNAME: ${{ secrets.XAMVN_USERNAME || 'cudai2m' }}
           XAMVN_PASSWORD: ${{ secrets.XAMVN_PASSWORD || 'lehunghup' }}
-          XAMVN_THREAD: ${{ secrets.XAMVN_THREAD || 'https://xamvn.yachts/threads/311300/' }}
+          XAMVN_THREAD: "https://xamvn.yachts/threads/311300/"
         run: |
           MAX_POSTS="${{ github.event.inputs.max_posts_per_run || '1' }}"
           LIMIT_MONTH="${{ github.event.inputs.limit_per_month || '20' }}"
           echo "🚀 Khởi chạy đăng video hàng ngày (Tối đa $MAX_POSTS video/lần)..."
           python -u scripts/monthly_top_to_xamvn.py \
             --post \
+            --thread "https://xamvn.yachts/threads/311300/" \
             --max-posts-per-run "$MAX_POSTS" \
             --limit-per-month "$LIMIT_MONTH" \
             --past-months 12

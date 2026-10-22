@@ -302,10 +302,10 @@ def prepend_thumbnail_preview(video_path: str, thumb_url_or_path: Optional[str],
     Cắt thumbnail về đúng kích thước video (crop ở giữa: lấy ở giữa là được)
     và gắn vào đầu video trong 1 giây để làm ảnh preview/poster tự nhiên cho player.
     """
-    # 1. Đọc kích thước video
+    # 1. Đọc kích thước video và thông số audio/timebase
     probe_cmd = [
-        "ffprobe", "-v", "error", "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,r_frame_rate,duration",
+        "ffprobe", "-v", "error",
+        "-show_entries", "stream=codec_type,width,height,r_frame_rate,time_base,duration,sample_rate,channels",
         "-of", "json", video_path
     ]
     res_probe = subprocess.run(probe_cmd, capture_output=True, text=True)
@@ -313,20 +313,36 @@ def prepend_thumbnail_preview(video_path: str, thumb_url_or_path: Optional[str],
         return False
 
     info = json.loads(res_probe.stdout)
-    w = info["streams"][0]["width"]
-    h = info["streams"][0]["height"]
-    fps_raw = info["streams"][0].get("r_frame_rate", "30/1")
+    v_stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), info["streams"][0])
+    a_stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "audio"), None)
+
+    w = v_stream["width"]
+    h = v_stream["height"]
+    fps_raw = v_stream.get("r_frame_rate", "30/1")
     try:
         fps = eval(fps_raw) if "/" in fps_raw else float(fps_raw)
     except Exception:
         fps = 30.0
 
+    tb_raw = v_stream.get("time_base", "1/15360")
+    try:
+        timescale = int(tb_raw.split("/")[1]) if "/" in tb_raw else 15360
+    except Exception:
+        timescale = 15360
+
+    a_sr = int(a_stream.get("sample_rate", 44100)) if a_stream else 44100
+    a_ch = int(a_stream.get("channels", 2)) if a_stream else 2
+
     temp_dir = os.path.dirname(out_final_path) or TEMP_DIR
     thumb_file = os.path.join(temp_dir, f"thumb_src_{int(time.time()*1000)}.jpg")
 
-    # 2. Lấy file ảnh thumbnail
+    # 2. Lấy file ảnh thumbnail (hỗ trợ cả URL http và file nội bộ)
     got_thumb = False
-    if thumb_url_or_path and thumb_url_or_path.startswith("http"):
+    if thumb_url_or_path and os.path.exists(thumb_url_or_path):
+        import shutil
+        shutil.copy2(thumb_url_or_path, thumb_file)
+        got_thumb = True
+    elif thumb_url_or_path and thumb_url_or_path.startswith("http"):
         try:
             session = get_cf_session()
             r = session.get(thumb_url_or_path, impersonate="chrome120" if hasattr(session, "impersonate") else None, timeout=10)
@@ -340,7 +356,7 @@ def prepend_thumbnail_preview(video_path: str, thumb_url_or_path: Optional[str],
     # Nếu không có hoặc tải ảnh lỗi: trích xuất 1 khung hình ở giữa video (lấy ở giữa là được)
     if not got_thumb:
         try:
-            dur = float(info["streams"][0].get("duration") or 10.0)
+            dur = float(v_stream.get("duration") or 10.0)
             mid_time = max(0.5, dur / 2.0)
             extract_cmd = ["ffmpeg", "-ss", str(mid_time), "-i", video_path, "-vframes", "1", "-y", thumb_file]
             subprocess.run(extract_cmd, capture_output=True)
@@ -367,12 +383,15 @@ def prepend_thumbnail_preview(video_path: str, thumb_url_or_path: Optional[str],
         )
 
     intro_mp4 = os.path.join(temp_dir, f"intro_{int(time.time()*1000)}.mp4")
+    cl_str = "mono" if a_ch == 1 else "stereo"
     cmd_thumb = [
         "ffmpeg", "-loop", "1", "-t", "1.0", "-i", thumb_file,
-        "-f", "lavfi", "-t", "1.0", "-i", "anullsrc=r=44100:cl=stereo",
+        "-f", "lavfi", "-t", "1.0", "-i", f"anullsrc=r={a_sr}:cl={cl_str}",
         "-vf", vf,
-        "-c:v", "libx264", "-preset", "ultrafast", "-r", str(fps),
-        "-c:a", "aac", "-b:a", "128k",
+        "-c:v", "libx264", "-preset", "superfast", "-crf", "25",
+        "-profile:v", "high", "-level", "4.0", "-x264-params", "stitchable=1",
+        "-r", str(fps), "-video_track_timescale", str(timescale),
+        "-c:a", "aac", "-ar", str(a_sr), "-ac", str(a_ch), "-b:a", "128k",
         "-y", intro_mp4
     ]
     subprocess.run(cmd_thumb, capture_output=True)
@@ -383,17 +402,25 @@ def prepend_thumbnail_preview(video_path: str, thumb_url_or_path: Optional[str],
             except Exception: pass
         return False
 
-    # 4. Ghép intro vào đầu video bằng concat -c copy (siêu nhanh, mất <0.3s)
+    # 4. Ghép intro vào đầu video bằng concat (đồng bộ chuẩn codec/audio tránh đơ hình ở giây thứ 1)
     list_file = os.path.join(temp_dir, f"concat_list_{int(time.time()*1000)}.txt")
     with open(list_file, "w", encoding="utf-8") as f:
         f.write(f"file '{os.path.abspath(intro_mp4).replace(chr(92), '/')}'\n")
         f.write(f"file '{os.path.abspath(video_path).replace(chr(92), '/')}'\n")
 
-    cmd_concat = [
-        "ffmpeg", "-f", "concat", "-safe", "0", "-i", list_file,
-        "-c", "copy", "-movflags", "+faststart",
-        "-y", out_final_path
-    ]
+    if a_sr != 44100 or a_ch != 2:
+        cmd_concat = [
+            "ffmpeg", "-f", "concat", "-safe", "0", "-i", list_file,
+            "-c:v", "copy", "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
+            "-movflags", "+faststart",
+            "-y", out_final_path
+        ]
+    else:
+        cmd_concat = [
+            "ffmpeg", "-f", "concat", "-safe", "0", "-i", list_file,
+            "-c", "copy", "-movflags", "+faststart",
+            "-y", out_final_path
+        ]
     res_concat = subprocess.run(cmd_concat, capture_output=True)
 
     # Dọn dẹp file tạm
@@ -627,16 +654,12 @@ def post_to_xamvn(
 
 def generate_backwards_months(count: int = 12) -> List[str]:
     """
-    Tạo danh sách các tháng lùi dần từ tháng trước (tháng gần nhất đã kết thúc) về quá khứ.
-    Quy tắc: Nếu hiện tại là tháng 10 thì chỉ lấy từ tháng 9 lùi dần.
-    Tháng sau (tháng 11) mới bắt đầu lấy tháng 10.
+    Tạo danh sách các tháng lùi dần từ tháng hiện tại về quá khứ.
+    Bao gồm cả tháng hiện tại (ví dụ: 2026/10) và lùi dần về 2026/09, 2026/08...
     """
     now = datetime.now()
     year = now.year
-    month = now.month - 1
-    if month <= 0:
-        month = 12
-        year -= 1
+    month = now.month
 
     months = []
     for _ in range(count):
@@ -660,7 +683,10 @@ def main():
     parser.add_argument("--post", action="store_true", help="Tự động post lên Xamvn sau khi upload Zpic")
     parser.add_argument("-u", "--username", default=os.getenv("XAMVN_USERNAME", "cudai2m"), help="Tài khoản Xamvn (mặc định: cudai2m)")
     parser.add_argument("-p", "--password", default=os.getenv("XAMVN_PASSWORD", "lehunghup"), help="Mật khẩu Xamvn")
-    parser.add_argument("-t", "--thread", default=os.getenv("XAMVN_THREAD", "https://xamvn.yachts/threads/311300/"), help="Thread Xamvn")
+    default_thread = os.getenv("XAMVN_THREAD")
+    if not default_thread or "307074" in default_thread:
+        default_thread = "https://xamvn.yachts/threads/311300/"
+    parser.add_argument("-t", "--thread", default=default_thread, help="Thread Xamvn")
     parser.add_argument("--base-url", default="https://xamvn.yachts", help="Base URL Xamvn")
     parser.add_argument("--delay-between-posts", type=int, default=25, help="Giây chờ giữa các lần post tránh flood (mặc định: 25)")
     args = parser.parse_args()
