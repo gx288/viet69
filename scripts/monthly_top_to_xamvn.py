@@ -613,8 +613,6 @@ def post_to_xamvn(
         return False, None
 
     parts = []
-    if thumb_url:
-        parts.append(f"[IMG]{thumb_url}[/IMG]")
     if bbcode:
         parts.append(bbcode)
     if title:

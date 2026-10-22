@@ -59,7 +59,7 @@ def main():
     print(f"Target Thread: {args.thread}")
     print(f"Watermark    : {wm or 'None'}")
     print(f"Trim Start   : {args.trim_start}s")
-    print("Thứ tự đăng  : 1. Thumbnail -> 2. Video Embed -> 3. Text Tiêu đề")
+    print("Thứ tự đăng  : 1. Video Embed -> 2. Text Tiêu đề (Đã bỏ Thumbnail)")
     print("=" * 65)
 
     video_item = {

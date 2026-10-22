@@ -44,8 +44,13 @@ def get_zpic_session(temp_dir):
     html_path = os.path.join(temp_dir, "zpic_home.html")
     extra_args = resolve_zpic_args()
 
+    for p in [html_path, cookies_path]:
+        if os.path.exists(p):
+            try: os.remove(p)
+            except Exception: pass
+
     cmd = [
-        "curl", "-s", "-L",
+        "curl", "-sS", "-L",
         *extra_args,
         "-c", cookies_path,
         "-A", USER_AGENT,
@@ -74,7 +79,10 @@ def upload_mp4_to_zpic(mp4_path, title, temp_dir):
 
     curl_bin = "curl.exe" if os.name == "nt" else "curl"
     cmd = [
-        curl_bin, "-s",
+        curl_bin, "-sS",
+        "--retry", "3",
+        "--retry-delay", "2",
+        "--max-time", "600",
         *extra_args,
         "-b", cookies_path,
         "-A", USER_AGENT,
