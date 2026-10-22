@@ -37,8 +37,12 @@ jobs:
 
       - name: 📦 Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg curl fonts-dejavu-core
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg curl fonts-dejavu-core
+          else
+            echo "ffmpeg and curl are already installed."
+          fi
 
       - name: 📦 Install Python packages
         run: |
