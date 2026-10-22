@@ -1,12 +1,13 @@
-name: Daily Top Monthly Video to Xamvn & XamVid
+name: "3. [Gộp Thủ Công] Tải Zpic & Đăng Xamvn Cùng Lúc"
 
 on:
-  schedule:
-    - cron: '0 5 * * *'  # Chạy tự động mỗi ngày 1 lần lúc 12:00 trưa giờ Việt Nam (05:00 UTC)
+  # Đã tắt tự động chạy vì đã tách thành 2 Action riêng:
+  # - Action 1: zpic-upload.yml (Chuyên tải & up Zpic tạo kho dự trữ)
+  # - Action 2: xamvn-comment-video.yml (Chuyên đăng nhập & comment Xamvn theo tần suất tùy chỉnh)
   workflow_dispatch:
     inputs:
       max_posts_per_run:
-        description: 'Số video cần đăng trong lần chạy này (mặc định: 1)'
+        description: 'Số video cần tải & đăng ngay trong lần chạy này (mặc định: 1)'
         required: false
         type: string
         default: '1'
@@ -49,7 +50,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🎬 Run Daily Top Video Poster
+      - name: 🎬 Run Combined Downloader & Xamvn Poster
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           XAMVN_USERNAME: ${{ secrets.XAMVN_USERNAME || 'cudai2m' }}
@@ -58,7 +59,7 @@ jobs:
         run: |
           MAX_POSTS="${{ github.event.inputs.max_posts_per_run || '1' }}"
           LIMIT_MONTH="${{ github.event.inputs.limit_per_month || '20' }}"
-          echo "🚀 Khởi chạy đăng video hàng ngày (Tối đa $MAX_POSTS video/lần)..."
+          echo "🚀 Khởi chạy gộp Tải Zpic & Đăng Xamvn (Tối đa $MAX_POSTS video/lần)..."
           python -u scripts/monthly_top_to_xamvn.py \
             --post \
             --thread "https://xamvn.yachts/threads/311300/" \
@@ -69,13 +70,13 @@ jobs:
       - name: 💾 Commit & Push Progress
         if: always()
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action Bot"
+          git config --local user.email "gx288@users.noreply.github.com"
+          git config --local user.name "gx288"
+          git pull --rebase origin main || true
           git add data/xamvn_posted_monthly.json data/monthly_videos.json data/zpic_uploaded.json data/zpic_bbcode.txt
           if git diff --staged --quiet; then
             echo "Không có video mới nào được đăng hôm nay."
           else
             git commit -m "Auto: daily top video $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
-            git pull --rebase origin main
             git push origin main
           fi

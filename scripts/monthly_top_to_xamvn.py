@@ -944,20 +944,29 @@ def process_priority_sheet_queue(
     now_month = datetime.now().strftime("%Y/%m")
 
     for row_idx in range(2, len(rows) + 1):
-        if args.max_posts_per_run and posted_count >= args.max_posts_per_run:
-            print(f"[+] Đã xử lý đủ {posted_count}/{args.max_posts_per_run} video từ Google Sheet ưu tiên cho lần chạy này.")
+        active_count = posted_count if args.post else uploaded_count
+        if args.max_posts_per_run and active_count >= args.max_posts_per_run:
+            print(f"[+] Đã xử lý đủ {active_count}/{args.max_posts_per_run} video từ Google Sheet ưu tiên cho lần chạy này.")
             break
 
         row = rows[row_idx - 1]
         col_a = (row[0] if len(row) > 0 else "").strip()
         col_b = (row[1] if len(row) > 1 else "").strip()
         col_c = (row[2] if len(row) > 2 else "").strip()
+        col_e = (row[4] if len(row) > 4 else "").strip()
 
         if not col_a and not col_b:
             continue
 
         status_lower = col_c.lower()
         if any(k in status_lower for k in ["đã lấy", "da lay", "done", "ok", "skip", "bỏ qua", "lỗi"]):
+            continue
+
+        # Ở chế độ chỉ tải & upload Zpic (không đăng Xamvn), bỏ qua các dòng đã up Zpic sẵn
+        if not args.post and (
+            any(k in status_lower for k in ["đã up zpic", "da up zpic", "chờ đăng", "cho dang"])
+            or (col_e.startswith("http") and ".mp4" in col_e.lower())
+        ):
             continue
 
         parsed = parse_priority_sheet_row(col_a, col_b)
@@ -1075,17 +1084,20 @@ def process_priority_sheet_queue(
             else:
                 print(f"    [-] Đăng bài lên Xamvn thất bại cho dòng #{row_idx}!")
         else:
-            # Chế độ chỉ upload không post Xamvn
+            # Chế độ chỉ upload Zpic (để dành cho Action 2 đăng Xamvn sau)
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            final_stream_col = record.get("source_stream") or col_b
             try:
                 ws.update(
-                    range_name=f"C{row_idx}:F{row_idx}",
-                    values=[["Đã lấy (Zpic)", "", direct_mp4, now_str]]
+                    range_name=f"B{row_idx}:F{row_idx}",
+                    values=[[final_stream_col, "Đã up Zpic (Chờ đăng)", "", direct_mp4, now_str]]
                 )
-            except Exception:
-                pass
+                print(f"    [+] Đã lưu Link Zpic MP4 và đánh dấu 'Đã up Zpic (Chờ đăng)' vào dòng #{row_idx} trên Google Sheet!")
+            except Exception as e:
+                print(f"    [!] Cảnh báo không ghi được trạng thái vào Google Sheet dòng #{row_idx}: {e}")
 
-    if posted_count == 0:
+    active_total = posted_count if args.post else uploaded_count
+    if active_total == 0:
         print("[i] Không còn link nào chờ xử lý trong Google Sheet ưu tiên. Chuyển sang quét Top Viet69 hàng tháng...")
 
     return uploaded_count, posted_count
@@ -1243,8 +1255,9 @@ def main():
 
     # BƯỚC 2: Chỉ khi Google Sheet ưu tiên đã hết link (hoặc chưa đủ max_posts_per_run) mới quét Top Viet69 theo tháng
     for m in all_months:
-        if args.max_posts_per_run and total_posted >= args.max_posts_per_run:
-            print(f"\n[+] Đã đăng đủ giới hạn {args.max_posts_per_run} video cho lần chạy hôm nay. Dừng quy trình.")
+        active_run_count = total_posted if args.post else total_uploaded
+        if args.max_posts_per_run and active_run_count >= args.max_posts_per_run:
+            print(f"\n[+] Đã xử lý đủ giới hạn {args.max_posts_per_run} video cho lần chạy này. Dừng quy trình.")
             break
 
         current_count = month_counts.get(m, 0)
@@ -1264,7 +1277,8 @@ def main():
             continue
 
         for idx, v in enumerate(top_videos, 1):
-            if args.max_posts_per_run and total_posted >= args.max_posts_per_run:
+            active_run_count = total_posted if args.post else total_uploaded
+            if args.max_posts_per_run and active_run_count >= args.max_posts_per_run:
                 print(f"[+] Đã đạt giới hạn {args.max_posts_per_run} video cho lần chạy này. Dừng tháng này.")
                 break
             if current_count >= args.limit_per_month:

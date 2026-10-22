@@ -1,0 +1,85 @@
+name: "2. Đăng Nhập & Comment Video Xamvn (Tùy Chỉnh Tần Suất)"
+
+on:
+  # =========================================================================
+  # TÙY CHỈNH THỜI GIAN & TẦN SUẤT COMMENT TẠI ĐÂY (Giờ Việt Nam = Giờ UTC + 7)
+  # - Mặc định đang để 3 lần/ngày lúc: 12:00 trưa, 18:00 chiều, 22:00 tối giờ VN
+  # - Nếu muốn chạy mỗi 3 tiếng 1 lần: đổi thành  '0 */3 * * *'
+  # - Nếu muốn chạy mỗi 2 tiếng từ 11h trưa -> 23h đêm VN: đổi thành '0 4,6,8,10,12,14,16 * * *'
+  # - Nếu chỉ muốn chạy ngày 1 lần lúc 12h trưa VN: đổi thành '0 5 * * *'
+  # =========================================================================
+  schedule:
+    - cron: '0 5,11,15 * * *'
+
+  workflow_dispatch:
+    inputs:
+      max_posts_per_run:
+        description: 'Số bình luận video cần đăng trong lần chạy này (mặc định: 1)'
+        required: false
+        type: string
+        default: '1'
+      thread_url:
+        description: 'Link Thread Xamvn cần bình luận'
+        required: false
+        type: string
+        default: 'https://xamvn.yachts/threads/311300/'
+      delay_between_posts:
+        description: 'Số giây chờ giữa 2 lần bình luận chống flood (mặc định: 25)'
+        required: false
+        type: string
+        default: '25'
+
+permissions:
+  contents: write
+
+jobs:
+  comment-xamvn:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 🐍 Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Install lightweight Python packages (Không cần FFmpeg)
+        run: |
+          python -m pip install --upgrade pip
+          pip install curl_cffi beautifulsoup4 gspread google-auth requests
+
+      - name: 💬 Đăng Nhập & Comment Video từ Kho Zpic lên Xamvn
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          XAMVN_USERNAME: ${{ secrets.XAMVN_USERNAME || 'cudai2m' }}
+          XAMVN_PASSWORD: ${{ secrets.XAMVN_PASSWORD || 'lehunghup' }}
+          XAMVN_THREAD: ${{ github.event.inputs.thread_url || 'https://xamvn.yachts/threads/311300/' }}
+        run: |
+          MAX_POSTS="${{ github.event.inputs.max_posts_per_run || '1' }}"
+          THREAD="${{ github.event.inputs.thread_url || 'https://xamvn.yachts/threads/311300/' }}"
+          DELAY="${{ github.event.inputs.delay_between_posts || '25' }}"
+
+          echo "🚀 Khởi chạy comment video đã up Zpic lên Xamvn (Tối đa $MAX_POSTS bài)..."
+          python -u scripts/post_zpic_to_xamvn.py \
+            --max-posts-per-run "$MAX_POSTS" \
+            --thread "$THREAD" \
+            --delay-between-posts "$DELAY"
+
+      - name: 💾 Commit & Push Lịch Sử Đăng Bài
+        if: always()
+        run: |
+          git config --local user.email "gx288@users.noreply.github.com"
+          git config --local user.name "gx288"
+          git pull --rebase origin main || true
+          git add data/xamvn_posted_monthly.json data/monthly_videos.json
+          if git diff --staged --quiet; then
+            echo "Không có bài đăng mới nào cần lưu."
+          else
+            git commit -m "Auto: comment video to Xamvn $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
+            git push origin main
+          fi
