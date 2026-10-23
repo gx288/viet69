@@ -81,11 +81,15 @@ jobs:
         run: |
           git config --local user.email "gx288@users.noreply.github.com"
           git config --local user.name "gx288"
-          git pull --rebase origin main || true
           git add data/xamvn_posted_monthly.json data/monthly_videos.json
           if git diff --staged --quiet; then
             echo "Không có bài đăng mới nào cần lưu."
           else
             git commit -m "Auto: comment to Xamvn $(date +'%Y-%m-%d %H:%M:%S') [skip ci]"
-            git push origin main
+            git checkout -- . || true
+            for i in 1 2 3 4 5; do
+              (git pull --rebase --autostash -X theirs origin main || { git rebase --abort 2>/dev/null || true; git checkout -- . || true; git pull --no-edit -X theirs origin main; }) && git push origin main && break
+              echo "Push bị xung đột lần $i, đợi 3s thử lại..."
+              sleep 3
+            done
           fi
