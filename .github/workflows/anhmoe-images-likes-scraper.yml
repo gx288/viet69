@@ -1,0 +1,65 @@
+name: Anhmoe Top Likes Image Scraper
+
+on:
+  schedule:
+    - cron: '30 8 * * *'  # Chạy hàng ngày lúc 08:30 UTC (15:30 chiều giờ VN)
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: 'Số trang muốn cào (hoặc "all" để cào hết)'
+        required: false
+        default: 'all'
+
+jobs:
+  scrape-images-likes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium gspread google-auth google-auth-oauthlib oauth2client
+
+      - name: Run images likes scraper
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          ZPIC_COOKIES_BASE64: ${{ secrets.ZPIC_COOKIES_BASE64 }}
+          ZPIC_USERNAME: ${{ secrets.ZPIC_USERNAME }}
+          ZPIC_PASSWORD: ${{ secrets.ZPIC_PASSWORD }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PAGES_ARG="${{ github.event.inputs.pages }}"
+            if [ -z "$PAGES_ARG" ]; then
+              PAGES_ARG="all"
+            fi
+            echo "Running manual images likes scrape with pages: $PAGES_ARG"
+            python -u anhmoe/scraper_images_likes.py "$PAGES_ARG"
+          else
+            echo "Running scheduled images likes scrape: all"
+            python -u anhmoe/scraper_images_likes.py all
+          fi
+
+      - name: Commit and push images_likes.json (if changed)
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add anhmoe/images_likes.json || true
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update top likes images data - $(date +'%Y-%m-%d %H:%M')"
+            git pull --rebase origin ${{ github.ref_name }} || { git rebase --abort; git pull origin ${{ github.ref_name }} --no-edit; }
+            git push origin HEAD:${{ github.ref_name }}
+          fi
